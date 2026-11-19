@@ -1,0 +1,637 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Phase 3: Hardened Global Primitives
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidOptionalId(id) {
+      return id is string && (id == '' || (id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$')));
+    }
+
+    function isBoundedString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isStringList(arr, maxItems, maxItemLen) {
+      return arr is list
+        && arr.size() <= maxItems
+        && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= maxItemLen));
+    }
+
+    function isMapList(arr, maxItems) {
+      return arr is list
+        && arr.size() <= maxItems
+        && (arr.size() == 0 || arr[0] is map);
+    }
+
+    // Zero-DB-read bootstrap admin check (safe for list rules if needed)
+    function isBootstrapAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'hopnghiep2@gmail.com';
+    }
+
+    // Trusted RBAC admin lookup (never trusts client claims)
+    function isAdmin() {
+      return isBootstrapAdmin()
+        || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // =========================================================================
+    // Phase 2 & Pillar 2: Entity Validation Blueprints
+    // =========================================================================
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'photoURL', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'role', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && isBoundedString(data.displayName, 1, 120)
+        && isBoundedString(data.email, 3, 254)
+        && isBoundedString(data.photoURL, 0, 2048)
+        && data.role in ['member', 'admin']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && isBoundedString(data.email, 3, 254)
+        && isBoundedString(data.displayName, 1, 120)
+        && isValidId(data.grantedBy)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidMemoirConfig(data) {
+      return data.keys().hasAll(['schemaVersion', 'home', 'settings', 'visibility', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['schemaVersion', 'home', 'settings', 'visibility', 'updatedBy', 'updatedAt'])
+        && isBoundedString(data.schemaVersion, 1, 32)
+        && data.home is map
+        && data.home.keys().hasAll(['hero', 'history', 'meaning', 'anthem', 'socialChannels', 'dataOrigin'])
+        && data.home.keys().hasOnly([
+          'hero', 'history', 'meaning', 'milestonesLabel', 'milestonesTitle',
+          'messagesLabel', 'messagesTitle', 'anthem', 'socialChannels', 'dataOrigin'
+        ])
+        && data.home.dataOrigin in ['sample', 'real']
+        && (!('milestonesLabel' in data.home) || isBoundedString(data.home.milestonesLabel, 0, 200))
+        && (!('milestonesTitle' in data.home) || isBoundedString(data.home.milestonesTitle, 0, 240))
+        && (!('messagesLabel' in data.home) || isBoundedString(data.home.messagesLabel, 0, 200))
+        && (!('messagesTitle' in data.home) || isBoundedString(data.home.messagesTitle, 0, 240))
+        && data.home.hero is map
+        && data.home.hero.keys().hasOnly(['spaceLabel', 'title', 'unitIntro', 'subtitle', 'heroImage'])
+        && isBoundedString(data.home.hero.spaceLabel, 0, 200)
+        && isBoundedString(data.home.hero.title, 1, 240)
+        && isBoundedString(data.home.hero.unitIntro, 0, 400)
+        && isBoundedString(data.home.hero.subtitle, 0, 2000)
+        && isBoundedString(data.home.hero.heroImage, 0, 2048)
+        && data.home.history is map
+        && data.home.history.keys().hasOnly([
+          'sectionLabel', 'sectionTitle', 'foundingTitle', 'foundingContent',
+          'stages', 'achievementsTitle', 'achievementsSummary'
+        ])
+        && isBoundedString(data.home.history.foundingTitle, 0, 240)
+        && isBoundedString(data.home.history.foundingContent, 0, 12000)
+        && isBoundedString(data.home.history.achievementsSummary, 0, 8000)
+        && isMapList(data.home.history.stages, 50)
+        && data.home.meaning is map
+        && data.home.meaning.keys().hasOnly([
+          'sectionLabel', 'sectionTitle', 'introContent', 'traditionalValuesTitle',
+          'traditionalValues', 'memoirGoalsTitle', 'memoirGoals',
+          'generationalConnectionTitle', 'generationalConnection'
+        ])
+        && isBoundedString(data.home.meaning.introContent, 0, 8000)
+        && isBoundedString(data.home.meaning.traditionalValues, 0, 4000)
+        && isBoundedString(data.home.meaning.memoirGoals, 0, 4000)
+        && isBoundedString(data.home.meaning.generationalConnection, 0, 4000)
+        && data.home.anthem is map
+        && data.home.anthem.keys().hasOnly([
+          'sectionLabel', 'title', 'authorName', 'composerInfo', 'relatedInfo',
+          'coverImage', 'lyricsLabel', 'lyrics', 'sections',
+          'youtubeSectionTitle', 'youtubeSectionSubtitle', 'youtubeTracks'
+        ])
+        && isBoundedString(data.home.anthem.title, 0, 240)
+        && isBoundedString(data.home.anthem.composerInfo, 0, 600)
+        && isBoundedString(data.home.anthem.coverImage, 0, 2048)
+        && isMapList(data.home.anthem.sections, 40)
+        && (!('youtubeTracks' in data.home.anthem) || isMapList(data.home.anthem.youtubeTracks, 30))
+        && isMapList(data.home.socialChannels, 30)
+        && data.settings is map
+        && data.settings.keys().hasAll(['themeMode', 'showSampleBanner', 'autoSaveEnabled', 'compactCards'])
+        && data.settings.keys().hasOnly(['themeMode', 'showSampleBanner', 'autoSaveEnabled', 'compactCards'])
+        && data.settings.themeMode in ['dark', 'neutral']
+        && data.settings.showSampleBanner is bool
+        && data.settings.autoSaveEnabled is bool
+        && data.settings.compactCards is bool
+        && data.visibility == 'public'
+        && isValidId(data.updatedBy)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMilestone(data) {
+      return data.keys().hasAll(['id', 'year', 'title', 'description', 'orderIndex', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'year', 'title', 'description', 'orderIndex', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isBoundedString(data.year, 1, 40)
+        && isBoundedString(data.title, 1, 240)
+        && isBoundedString(data.description, 0, 4000)
+        && data.orderIndex is number
+        && data.orderIndex >= 0 && data.orderIndex <= 100000
+        && data.dataOrigin in ['sample', 'real']
+        && data.visibility == 'public'
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLeaderMessage(data) {
+      return data.keys().hasAll(['id', 'title', 'authorName', 'authorRole', 'period', 'content', 'displayDate', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'authorName', 'authorRole', 'period', 'content', 'displayDate', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isBoundedString(data.title, 1, 240)
+        && isBoundedString(data.authorName, 1, 160)
+        && isBoundedString(data.authorRole, 0, 200)
+        && isBoundedString(data.period, 0, 120)
+        && isBoundedString(data.content, 1, 12000)
+        && isBoundedString(data.displayDate, 0, 40)
+        && data.dataOrigin in ['sample', 'real']
+        && data.visibility == 'public'
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCohort(data) {
+      return data.keys().hasAll(['id', 'name', 'period', 'description', 'linkedEventIds', 'linkedMilestoneIds', 'linkedMessageIds', 'orderIndex', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'name', 'period', 'description', 'linkedEventIds', 'linkedMilestoneIds', 'linkedMessageIds', 'orderIndex', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isBoundedString(data.name, 1, 160)
+        && isBoundedString(data.period, 0, 120)
+        && isBoundedString(data.description, 0, 4000)
+        && isStringList(data.linkedEventIds, 100, 128)
+        && isStringList(data.linkedMilestoneIds, 100, 128)
+        && isStringList(data.linkedMessageIds, 100, 128)
+        && data.orderIndex is number
+        && data.orderIndex >= 0 && data.orderIndex <= 100000
+        && data.dataOrigin in ['sample', 'real']
+        && data.visibility == 'public'
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMemberSocials(socials) {
+      return socials is map
+        && socials.keys().hasOnly(['facebook', 'website'])
+        && (!('facebook' in socials) || isBoundedString(socials.facebook, 0, 2048))
+        && (!('website' in socials) || isBoundedString(socials.website, 0, 2048));
+    }
+
+    function isValidMember(data) {
+      return data.keys().hasAll([
+          'id', 'group', 'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
+          'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
+          'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
+          'socials', 'favoriteQuote', 'orderIndex', 'dataOrigin', 'visibility',
+          'ownerUid', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'group', 'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
+          'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
+          'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
+          'socials', 'favoriteQuote', 'orderIndex', 'dataOrigin', 'visibility',
+          'ownerUid', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.group in ['member', 'guest_advisor']
+        && isValidOptionalId(data.cohortId)
+        && isBoundedString(data.fullName, 1, 160)
+        && isBoundedString(data.youthPhoto, 0, 2048)
+        && isBoundedString(data.presentPhoto, 0, 2048)
+        && isBoundedString(data.cohortLabel, 0, 120)
+        && isBoundedString(data.presentLabel, 0, 120)
+        && isBoundedString(data.role, 0, 200)
+        && isBoundedString(data.occupation, 0, 200)
+        && isBoundedString(data.field, 0, 200)
+        && isBoundedString(data.joinDate, 0, 40)
+        && isBoundedString(data.biography, 0, 6000)
+        && isBoundedString(data.selfIntro, 0, 4000)
+        && isStringList(data.achievements, 50, 500)
+        && isMapList(data.activityPhotos, 60)
+        && isMapList(data.articles, 50)
+        && isValidMemberSocials(data.socials)
+        && isBoundedString(data.favoriteQuote, 0, 600)
+        && data.orderIndex is number
+        && data.orderIndex >= 0 && data.orderIndex <= 100000
+        && data.dataOrigin in ['sample', 'real']
+        && data.visibility == 'public'
+        && isValidOptionalId(data.ownerUid)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMemberPrivateContact(data) {
+      return data.keys().hasAll(['memberId', 'ownerUid', 'phone', 'email', 'zalo', 'viber', 'updatedAt'])
+        && data.keys().hasOnly(['memberId', 'ownerUid', 'phone', 'email', 'zalo', 'viber', 'updatedAt'])
+        && isValidId(data.memberId)
+        && isValidOptionalId(data.ownerUid)
+        && isBoundedString(data.phone, 0, 40)
+        && isBoundedString(data.email, 0, 254)
+        && isBoundedString(data.zalo, 0, 80)
+        && isBoundedString(data.viber, 0, 80)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll([
+          'id', 'title', 'category', 'date', 'startTime', 'endTime', 'location',
+          'intro', 'proceedings', 'results', 'summary', 'coverImage',
+          'photos', 'videos', 'participantMemberIds', 'dataOrigin', 'visibility',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'title', 'category', 'date', 'startTime', 'endTime', 'location',
+          'intro', 'proceedings', 'results', 'summary', 'coverImage',
+          'photos', 'videos', 'participantMemberIds', 'dataOrigin', 'visibility',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isBoundedString(data.title, 1, 240)
+        && data.category in [
+          'Phong trào',
+          'Tình nguyện',
+          'Đại hội',
+          'Kỷ niệm',
+          'Văn nghệ',
+          'Hoạt động truyền thống',
+          'Hoạt động khác'
+        ]
+        && isBoundedString(data.date, 0, 40)
+        && isBoundedString(data.startTime, 0, 20)
+        && isBoundedString(data.endTime, 0, 20)
+        && isBoundedString(data.location, 0, 300)
+        && isBoundedString(data.intro, 0, 6000)
+        && isBoundedString(data.proceedings, 0, 12000)
+        && isBoundedString(data.results, 0, 6000)
+        && isBoundedString(data.summary, 0, 2000)
+        && isBoundedString(data.coverImage, 0, 2048)
+        && isMapList(data.photos, 60)
+        && isMapList(data.videos, 20)
+        && isStringList(data.participantMemberIds, 200, 128)
+        && data.dataOrigin in ['sample', 'real']
+        && data.visibility == 'public'
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    // 1. Private User Accounts (/users/{userId}) — PII Isolated
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && isOwner(userId)
+        && incoming().uid == request.auth.uid
+        && incoming().email == request.auth.token.email
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().role == 'member' || isAdmin());
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().email == request.auth.token.email
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'email', 'updatedAt'])
+          ) || (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'role', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // 2. Trusted Admin Registry (/admins/{adminId})
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrapAdmin();
+
+      allow create: if isVerifiedUser()
+        && isValidId(adminId)
+        && isValidAdmin(incoming())
+        && incoming().uid == adminId
+        && incoming().grantedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && isAdmin();
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser()
+        && isValidId(adminId)
+        && adminId != request.auth.uid
+        && isAdmin();
+    }
+
+    // 3. Global Memoir Config & Home Content (/memoirConfig/{configId})
+    match /memoirConfig/{configId} {
+      allow get: if isSignedIn() && isValidId(configId) && configId == 'main' && (resource == null || existing().visibility == 'public');
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(configId)
+        && configId == 'main'
+        && isValidMemoirConfig(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isVerifiedUser()
+        && isValidId(configId)
+        && configId == 'main'
+        && isValidMemoirConfig(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'schemaVersion', 'home', 'settings', 'visibility', 'updatedBy', 'updatedAt'
+        ])
+        && isAdmin();
+
+      allow delete: if false;
+    }
+
+    // 4. Historical Timeline Milestones (/milestones/{milestoneId})
+    match /milestones/{milestoneId} {
+      allow get: if isSignedIn() && isValidId(milestoneId) && existing().visibility == 'public';
+      allow list: if isSignedIn() && resource.data.visibility == 'public';
+
+      allow create: if isVerifiedUser()
+        && isValidId(milestoneId)
+        && isValidMilestone(incoming())
+        && incoming().id == milestoneId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isVerifiedUser()
+        && isValidId(milestoneId)
+        && isValidMilestone(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'year', 'title', 'description', 'orderIndex', 'dataOrigin', 'visibility', 'updatedAt'
+        ])
+        && isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(milestoneId) && isAdmin();
+    }
+
+    // 5. Leader Messages (/leaderMessages/{messageId})
+    match /leaderMessages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId) && existing().visibility == 'public';
+      allow list: if isSignedIn() && resource.data.visibility == 'public';
+
+      allow create: if isVerifiedUser()
+        && isValidId(messageId)
+        && isValidLeaderMessage(incoming())
+        && incoming().id == messageId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isVerifiedUser()
+        && isValidId(messageId)
+        && isValidLeaderMessage(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'authorName', 'authorRole', 'period', 'content', 'displayDate', 'dataOrigin', 'visibility', 'updatedAt'
+        ])
+        && isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(messageId) && isAdmin();
+    }
+
+    // 6. Cohorts / Generations (/cohorts/{cohortId})
+    match /cohorts/{cohortId} {
+      allow get: if isSignedIn() && isValidId(cohortId) && existing().visibility == 'public';
+      allow list: if isSignedIn() && resource.data.visibility == 'public';
+
+      allow create: if isVerifiedUser()
+        && isValidId(cohortId)
+        && isValidCohort(incoming())
+        && incoming().id == cohortId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isVerifiedUser()
+        && isValidId(cohortId)
+        && isValidCohort(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'period', 'description', 'linkedEventIds', 'linkedMilestoneIds',
+          'linkedMessageIds', 'orderIndex', 'dataOrigin', 'visibility', 'updatedAt'
+        ])
+        && isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(cohortId) && isAdmin();
+    }
+
+    // 7. Public Member Profiles (/members/{memberId}) — PII Isolated in /private/contact
+    match /members/{memberId} {
+      allow get: if isSignedIn() && isValidId(memberId) && existing().visibility == 'public';
+      allow list: if isSignedIn() && resource.data.visibility == 'public';
+
+      allow create: if isVerifiedUser()
+        && isValidId(memberId)
+        && isValidMember(incoming())
+        && incoming().id == memberId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            incoming().ownerUid == request.auth.uid
+            && incoming().group == 'member'
+            && incoming().dataOrigin == 'real'
+          )
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(memberId)
+        && isValidMember(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Tier 1: Admin full editorial update
+          (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'group', 'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
+              'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
+              'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
+              'socials', 'favoriteQuote', 'orderIndex', 'dataOrigin', 'visibility',
+              'ownerUid', 'updatedAt'
+            ])
+          ) ||
+          // Tier 2: Profile Owner self-service content update (cannot change group, orderIndex, ownerUid, visibility)
+          (
+            existing().ownerUid == request.auth.uid
+            && incoming().ownerUid == existing().ownerUid
+            && incoming().group == existing().group
+            && incoming().orderIndex == existing().orderIndex
+            && incoming().visibility == existing().visibility
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
+              'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
+              'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
+              'socials', 'favoriteQuote', 'dataOrigin', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(memberId) && isAdmin();
+
+      // 7b. Isolated PII Contact Subcollection (/members/{memberId}/private/{docId})
+      // Pillar 1 (Master Gate) + Pillar 6 (PII Isolation) + Pillar 7 (Atomicity Guarantee via existsAfter/getAfter)
+      match /private/{docId} {
+        allow get: if isSignedIn()
+          && isValidId(memberId)
+          && docId == 'contact'
+          && exists(/databases/$(database)/documents/members/$(memberId))
+          && (
+            isAdmin()
+            || get(/databases/$(database)/documents/members/$(memberId)).data.ownerUid == request.auth.uid
+          );
+
+        allow list: if false;
+
+        allow create: if isVerifiedUser()
+          && isValidId(memberId)
+          && docId == 'contact'
+          && isValidMemberPrivateContact(incoming())
+          && incoming().memberId == memberId
+          && incoming().updatedAt == request.time
+          && existsAfter(/databases/$(database)/documents/members/$(memberId))
+          && (
+            isAdmin() || (
+              getAfter(/databases/$(database)/documents/members/$(memberId)).data.ownerUid == request.auth.uid
+              && incoming().ownerUid == request.auth.uid
+            )
+          );
+
+        allow update: if isVerifiedUser()
+          && isValidId(memberId)
+          && docId == 'contact'
+          && isValidMemberPrivateContact(incoming())
+          && incoming().memberId == existing().memberId
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/members/$(memberId))
+          && (
+            (
+              isAdmin()
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'ownerUid', 'phone', 'email', 'zalo', 'viber', 'updatedAt'
+              ])
+            ) || (
+              get(/databases/$(database)/documents/members/$(memberId)).data.ownerUid == request.auth.uid
+              && incoming().ownerUid == existing().ownerUid
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'phone', 'email', 'zalo', 'viber', 'updatedAt'
+              ])
+            )
+          );
+
+        allow delete: if isVerifiedUser()
+          && isValidId(memberId)
+          && docId == 'contact'
+          && isAdmin();
+      }
+    }
+
+    // 8. School Events (/events/{eventId})
+    match /events/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId) && existing().visibility == 'public';
+      allow list: if isSignedIn() && resource.data.visibility == 'public';
+
+      allow create: if isVerifiedUser()
+        && isValidId(eventId)
+        && isValidEvent(incoming())
+        && incoming().id == eventId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isVerifiedUser()
+        && isValidId(eventId)
+        && isValidEvent(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'category', 'date', 'startTime', 'endTime', 'location',
+          'intro', 'proceedings', 'results', 'summary', 'coverImage',
+          'photos', 'videos', 'participantMemberIds', 'dataOrigin', 'visibility', 'updatedAt'
+        ])
+        && isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(eventId) && isAdmin();
+    }
+  }
+}

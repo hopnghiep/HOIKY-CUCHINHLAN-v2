@@ -1,0 +1,8 @@
+{
+  "name": "Remix Hồi ký Chi đoàn Cù Chính Lan",
+  "description": "Không gian hồi ký điện tử lưu giữ lịch sử hình thành, hồ sơ đoàn viên qua các thế hệ và dấu ấn sự kiện của Chi đoàn Cù Chính Lan – Đoàn trường THPT Hoàng Hoa Thám – Quận Đoàn Bình Thạnh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

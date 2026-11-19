@@ -1,0 +1,305 @@
+import React, { useMemo, useState } from 'react';
+import { Calendar, Clock, Edit3, Film, MapPin, Sparkles, Users, X } from 'lucide-react';
+import { useMemoir } from '../../context/MemoirContext';
+import type { SchoolEvent } from '../../types/memoir';
+import { ResilientImage } from '../common/ResilientMedia';
+import { CollapsibleText } from '../common/CollapsibleText';
+import { getAdminAuthHeaders } from '../../services/authToken';
+
+interface EventDetailModalProps {
+  event: SchoolEvent | null;
+  onClose: () => void;
+  onEdit: (event: SchoolEvent) => void;
+}
+
+export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalProps) {
+  const { data, isAdmin, aiConfigured, updateData, notify } = useMemoir();
+  const [selectedAlbum, setSelectedAlbum] = useState<string>('Tất cả');
+  const [summarizing, setSummarizing] = useState(false);
+
+  const albums = useMemo(() => {
+    if (!event) return ['Tất cả'];
+    const names = Array.from(new Set(event.photos.map((p) => p.albumName || 'Chung')));
+    return ['Tất cả', ...names];
+  }, [event]);
+
+  if (!event) return null;
+
+  const participants = data.members.filter((m) => event.participantMemberIds.includes(m.id));
+  const visiblePhotos =
+    selectedAlbum === 'Tất cả'
+      ? event.photos
+      : event.photos.filter((p) => (p.albumName || 'Chung') === selectedAlbum);
+
+  const handleGenerateAiSummary = async () => {
+    setSummarizing(true);
+    try {
+      const res = await fetch('/api/ai/summarize-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAdminAuthHeaders() },
+        body: JSON.stringify({
+          title: event.title,
+          category: event.category,
+          date: event.date,
+          location: event.location,
+          intro: event.intro,
+          proceedings: event.proceedings,
+          results: event.results,
+        }),
+      });
+      const json = (await res.json()) as { summary?: string; error?: string };
+      if (!res.ok || !json.summary) {
+        notify(json.error || 'Không thể tạo tóm tắt sự kiện.', 'error');
+        return;
+      }
+      updateData(
+        (prev) => ({
+          ...prev,
+          events: prev.events.map((e) =>
+            e.id === event.id
+              ? { ...e, summary: json.summary || e.summary, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+              : e
+          ),
+        }),
+        'Đã tạo và lưu bản tóm tắt sự kiện.'
+      );
+    } catch {
+      notify('Không thể kết nối máy chủ để tạo tóm tắt.', 'error');
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="event-detail-title"
+    >
+      <div className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-3xl border border-white/10 bg-[#171719] shadow-2xl">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#171719]/95 px-6 py-4 backdrop-blur-md">
+          <div className="min-w-0">
+            <div className="text-xs font-medium text-[#F02028]">
+              {event.category} · <span className="font-mono-num">{event.date}</span>
+              {event.dataOrigin === 'sample' ? ' · Sự kiện mẫu minh họa' : ''}
+            </div>
+            <h2 id="event-detail-title" className="truncate font-display text-xl sm:text-2xl font-semibold text-white">
+              {event.title}
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => onEdit(event)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#242428] px-3.5 py-2 text-xs font-medium text-white hover:bg-white/10 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-[#F02028]" />
+                Sửa sự kiện
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Đóng chi tiết sự kiện"
+              className="rounded-xl p-2 text-zinc-400 hover:bg-white/10 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 sm:p-8 space-y-8">
+          {/* Cover + Metadata */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            <div className="lg:col-span-6 overflow-hidden rounded-2xl border border-white/10 bg-[#242428] aspect-[4/3]">
+              <ResilientImage src={event.coverImage} alt={event.title} className="h-full w-full object-cover" />
+            </div>
+
+            <div className="lg:col-span-6 flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-[#242428] p-5">
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center gap-2 text-zinc-200">
+                  <Calendar className="w-4 h-4 text-[#F02028]" />
+                  <span>Ngày tổ chức:</span>
+                  <span className="font-mono-num font-medium">{event.date}</span>
+                </div>
+                <div className="flex items-center gap-2 text-zinc-200">
+                  <Clock className="w-4 h-4 text-[#F02028]" />
+                  <span>Thời gian:</span>
+                  <span className="font-mono-num">
+                    {event.startTime || '--:--'} – {event.endTime || '--:--'}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 text-zinc-200">
+                  <MapPin className="w-4 h-4 text-[#F02028] shrink-0 mt-0.5" />
+                  <span>{event.location || 'Chưa cập nhật địa điểm'}</span>
+                </div>
+              </div>
+
+              <div className="border-t border-white/10 pt-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    Tóm tắt sự kiện
+                  </span>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleGenerateAiSummary}
+                      disabled={summarizing}
+                      title={
+                        aiConfigured
+                          ? 'Dùng AI tạo bản tóm tắt trang trọng từ nội dung sự kiện'
+                          : 'Cần cấu hình GEMINI_API_KEY để sử dụng tính năng này'
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#171719] px-2.5 py-1 text-xs text-zinc-200 hover:border-[#F02028] disabled:opacity-50 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#F02028]" />
+                      <span>{summarizing ? 'Đang tóm tắt...' : 'Tóm tắt bằng AI'}</span>
+                    </button>
+                  )}
+                </div>
+                <CollapsibleText
+                  as="p"
+                  text={event.summary || 'Chưa có bản tóm tắt sự kiện.'}
+                  collapsedLines={2}
+                  className="text-sm text-zinc-200 leading-relaxed"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Narrative Sections */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F02028]">Nội dung giới thiệu</h3>
+              <CollapsibleText
+                as="p"
+                text={event.intro || 'Chưa cập nhật.'}
+                collapsedLines={3}
+                className="text-sm text-zinc-300 leading-relaxed"
+              />
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F02028]">Diễn biến sự kiện</h3>
+              <CollapsibleText
+                as="p"
+                text={event.proceedings || 'Chưa cập nhật.'}
+                collapsedLines={3}
+                className="text-sm text-zinc-300 leading-relaxed"
+              />
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F02028]">Thành tích & Kết quả</h3>
+              <CollapsibleText
+                as="p"
+                text={event.results || 'Chưa cập nhật.'}
+                collapsedLines={3}
+                className="text-sm text-zinc-300 leading-relaxed"
+              />
+            </div>
+          </div>
+
+          {/* Participating Members */}
+          <section className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Users className="w-4 h-4 text-[#F02028]" />
+              <span>Thành viên tham gia ({participants.length})</span>
+            </div>
+            {participants.length === 0 ? (
+              <p className="text-xs text-zinc-400">Chưa gắn thành viên tham gia sự kiện này.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {participants.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#171719] p-2.5"
+                  >
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
+                      <ResilientImage
+                        src={p.presentPhoto || p.youthPhoto}
+                        alt={p.fullName}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold text-white">{p.fullName}</div>
+                      <div className="truncate text-[11px] text-zinc-400">{p.role}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Photo Albums */}
+          <section className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 className="text-base font-semibold text-white">
+                Album hình ảnh ({event.photos.length})
+              </h3>
+              {albums.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {albums.map((album) => (
+                    <button
+                      key={album}
+                      type="button"
+                      onClick={() => setSelectedAlbum(album)}
+                      className={`rounded-lg px-3 py-1 text-xs font-medium cursor-pointer ${
+                        selectedAlbum === album
+                          ? 'bg-[#F02028] text-white'
+                          : 'bg-[#242428] text-zinc-300 hover:text-white'
+                      }`}
+                    >
+                      {album}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {visiblePhotos.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-[#242428]/50 p-6 text-center text-xs text-zinc-400">
+                Chưa có hình ảnh trong album này.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visiblePhotos.map((photo) => (
+                  <figure key={photo.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#242428]">
+                    <div className="aspect-[4/3]">
+                      <ResilientImage src={photo.url} alt={photo.caption} className="h-full w-full object-cover" />
+                    </div>
+                    <figcaption className="p-3 text-xs text-zinc-300">
+                      <div className="font-medium text-white truncate">{photo.caption || 'Ảnh tư liệu'}</div>
+                      <div className="text-[11px] text-zinc-400 mt-0.5">Album: {photo.albumName || 'Chung'}</div>
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Videos */}
+          {event.videos.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-base font-semibold text-white">
+                <Film className="w-4 h-4 text-[#F02028]" />
+                <span>Video tư liệu ({event.videos.length})</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {event.videos.map((vid) => (
+                  <div key={vid.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#242428] p-3 space-y-2">
+                    <video controls className="w-full rounded-xl bg-black aspect-video" src={vid.url} />
+                    <div className="text-xs font-medium text-white truncate">{vid.title}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

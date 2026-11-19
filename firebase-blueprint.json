@@ -1,0 +1,605 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Private Firebase Authentication user profile stored per UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Authentication UID matching the document ID."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Display name from Google account or user update."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified user email address (PII)."
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Profile avatar URL."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["member", "admin"],
+          "description": "Server/admin controlled role."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": ["uid", "displayName", "email", "photoURL", "role", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator grant record keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Granted admin UID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Admin email address."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Admin display name."
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the administrator who granted this role."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin access was granted."
+        }
+      },
+      "required": ["uid", "email", "displayName", "grantedBy", "createdAt"]
+    },
+    "MemoirConfig": {
+      "title": "MemoirConfig",
+      "description": "Global memoir configuration, home editorial content, anthem, social channels, and app settings.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Schema version identifier."
+        },
+        "home": {
+          "type": "object",
+          "description": "Home memoir sections: hero, history, meaning, anthem, socialChannels, labels, dataOrigin."
+        },
+        "settings": {
+          "type": "object",
+          "description": "Application display and behavior settings."
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"],
+          "description": "Visibility gate for yearbook publication."
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of last admin editor."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": ["schemaVersion", "home", "settings", "visibility", "updatedBy", "updatedAt"]
+    },
+    "TimelineMilestone": {
+      "title": "TimelineMilestone",
+      "description": "Historical milestone in the Youth Union branch timeline.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "year": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "orderIndex": {
+          "type": "number"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "enum": ["sample", "real"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"]
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "year", "title", "description", "orderIndex", "dataOrigin", "visibility", "createdBy", "createdAt", "updatedAt"]
+    },
+    "LeaderMessage": {
+      "title": "LeaderMessage",
+      "description": "Editorial foreword or message from Youth Union leaders across generations.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "authorRole": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "period": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000
+        },
+        "displayDate": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "dataOrigin": {
+          "type": "string",
+          "enum": ["sample", "real"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"]
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "authorName", "authorRole", "period", "content", "displayDate", "dataOrigin", "visibility", "createdBy", "createdAt", "updatedAt"]
+    },
+    "CohortItem": {
+      "title": "CohortItem",
+      "description": "Cohort/generation grouping linking members, events, milestones, and leader messages.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "period": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "linkedEventIds": {
+          "type": "array",
+          "description": "Bounded list of up to 100 linked event IDs."
+        },
+        "linkedMilestoneIds": {
+          "type": "array",
+          "description": "Bounded list of up to 100 linked milestone IDs."
+        },
+        "linkedMessageIds": {
+          "type": "array",
+          "description": "Bounded list of up to 100 linked message IDs."
+        },
+        "orderIndex": {
+          "type": "number"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "enum": ["sample", "real"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"]
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "period", "description", "linkedEventIds", "linkedMilestoneIds", "linkedMessageIds", "orderIndex", "dataOrigin", "visibility", "createdBy", "createdAt", "updatedAt"]
+    },
+    "MemberProfilePublic": {
+      "title": "MemberProfilePublic",
+      "description": "Public yearbook profile for a Youth Union member or guest/advisor (PII isolated in private subcollection).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "group": {
+          "type": "string",
+          "enum": ["member", "guest_advisor"]
+        },
+        "cohortId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "youthPhoto": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "presentPhoto": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "cohortLabel": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "presentLabel": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "occupation": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "field": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "joinDate": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "biography": {
+          "type": "string",
+          "maxLength": 6000
+        },
+        "selfIntro": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "achievements": {
+          "type": "array",
+          "description": "Bounded list of up to 50 achievements."
+        },
+        "activityPhotos": {
+          "type": "array",
+          "description": "Bounded list of up to 60 activity photo objects."
+        },
+        "articles": {
+          "type": "array",
+          "description": "Bounded list of up to 50 shared article objects."
+        },
+        "socials": {
+          "type": "object",
+          "description": "Public social links (facebook, website)."
+        },
+        "favoriteQuote": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "orderIndex": {
+          "type": "number"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "enum": ["sample", "real"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"]
+        },
+        "ownerUid": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Firebase Auth UID of the member who owns this profile, or empty string if admin-managed."
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "group", "cohortId", "fullName", "youthPhoto", "presentPhoto", "cohortLabel", "presentLabel", "role", "occupation", "field", "joinDate", "biography", "selfIntro", "achievements", "activityPhotos", "articles", "socials", "favoriteQuote", "orderIndex", "dataOrigin", "visibility", "ownerUid", "createdBy", "createdAt", "updatedAt"]
+    },
+    "MemberPrivateContact": {
+      "title": "MemberPrivateContact",
+      "description": "Isolated PII contact information (phone, email, zalo, viber) accessible only by the member owner or admins.",
+      "type": "object",
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "zalo": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "viber": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["memberId", "ownerUid", "phone", "email", "zalo", "viber", "updatedAt"]
+    },
+    "SchoolEvent": {
+      "title": "SchoolEvent",
+      "description": "Youth Union event archive with descriptions, photos, videos, and participant links.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Phong trào",
+            "Tình nguyện",
+            "Đại hội",
+            "Kỷ niệm",
+            "Văn nghệ",
+            "Hoạt động truyền thống",
+            "Hoạt động khác"
+          ]
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "startTime": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "endTime": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "intro": {
+          "type": "string",
+          "maxLength": 6000
+        },
+        "proceedings": {
+          "type": "string",
+          "maxLength": 12000
+        },
+        "results": {
+          "type": "string",
+          "maxLength": 6000
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "coverImage": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "photos": {
+          "type": "array",
+          "description": "Bounded list of up to 60 event photo objects."
+        },
+        "videos": {
+          "type": "array",
+          "description": "Bounded list of up to 20 event video objects."
+        },
+        "participantMemberIds": {
+          "type": "array",
+          "description": "Bounded list of up to 200 participant member IDs."
+        },
+        "dataOrigin": {
+          "type": "string",
+          "enum": ["sample", "real"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"]
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "title", "category", "date", "startTime", "endTime", "location", "intro", "proceedings", "results", "summary", "coverImage", "photos", "videos", "participantMemberIds", "dataOrigin", "visibility", "createdBy", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Private authenticated user profiles (owner or admin only)."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator grant records."
+    },
+    "/memoirConfig/{configId}": {
+      "schema": { "$ref": "#/entities/MemoirConfig" },
+      "description": "Singleton home memoir content and application settings at /memoirConfig/main."
+    },
+    "/milestones/{milestoneId}": {
+      "schema": { "$ref": "#/entities/TimelineMilestone" },
+      "description": "Historical timeline milestones."
+    },
+    "/leaderMessages/{messageId}": {
+      "schema": { "$ref": "#/entities/LeaderMessage" },
+      "description": "Forewords and messages from Youth Union leaders."
+    },
+    "/cohorts/{cohortId}": {
+      "schema": { "$ref": "#/entities/CohortItem" },
+      "description": "Generation/cohort groupings with linked memoir references."
+    },
+    "/members/{memberId}": {
+      "schema": { "$ref": "#/entities/MemberProfilePublic" },
+      "description": "Public yearbook member and guest/advisor profiles (PII stripped)."
+    },
+    "/members/{memberId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/MemberPrivateContact" },
+      "description": "Isolated PII contact subcollection (/members/{memberId}/private/contact)."
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/SchoolEvent" },
+      "description": "Historical events, photo albums, videos, and tagged participants."
+    }
+  }
+}
