@@ -47,7 +47,7 @@ export function MembersView() {
     publishMemberUpdate,
   } = useMemoir();
   const [search, setSearch] = useState('');
-  const [groupFilter, setGroupFilter] = useState<'all' | MemberGroup>('all');
+  const [groupFilter, setGroupFilter] = useState<'all' | MemberGroup>('member');
   const [viewMode, setViewMode] = useState<MemberViewMode>('by_cohort');
   const [cohortFilter, setCohortFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('manual');
