@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   HelpCircle,
   LogIn,
   LogOut,
@@ -9,7 +10,6 @@ import {
   Menu,
   Minimize2,
   Redo2,
-  RefreshCw,
   Settings,
   Shield,
   Undo2,
@@ -31,13 +31,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     isSignedIn,
     isAdmin,
     adminName,
-    isSaving,
     canUndo,
     canRedo,
-    pendingMemberIds,
     undo,
     redo,
-    syncNow,
     logoutAdmin,
     toasts,
     dismissToast,
@@ -47,7 +44,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [homeSubmenuOpen, setHomeSubmenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const navContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onFsChange = () => {
@@ -56,6 +55,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  useEffect(() => {
+    if (!homeSubmenuOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (navContainerRef.current && !navContainerRef.current.contains(e.target as Node)) {
+        setHomeSubmenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setHomeSubmenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [homeSubmenuOpen]);
 
   const toggleFullscreen = async () => {
     try {
@@ -66,6 +85,41 @@ export function Layout({ children }: { children: React.ReactNode }) {
       }
     } catch {
       // Ignore if fullscreen is restricted by iframe permissions
+    }
+  };
+
+  const homeSubmenuItems: { id: string; num: string; label: string }[] = [
+    { id: 'home-hero', num: '00', label: 'Giới thiệu chung' },
+    { id: 'home-analytics', num: 'KPI', label: 'Số liệu & Infographic lưu trữ' },
+    { id: 'home-history', num: '01', label: data.home.history.sectionTitle || 'Lịch sử hình thành' },
+    { id: 'home-meaning', num: '02', label: data.home.meaning.sectionTitle || 'Ý nghĩa và mục tiêu' },
+    { id: 'home-milestones', num: '03', label: data.home.milestonesTitle || 'Mốc son và sự kiện quan trọng' },
+    { id: 'home-anthem', num: '04', label: data.home.anthem.title || 'Hành khúc Chi đoàn' },
+    {
+      id: 'home-messages',
+      num: '05',
+      label: data.home.messagesTitle || 'Lời ngỏ của Hiệu trưởng và Các thế hệ lãnh đạo',
+    },
+  ];
+
+  const scrollToHomeSection = (sectionId: string) => {
+    setHomeSubmenuOpen(false);
+    setMobileMenuOpen(false);
+    const attemptScroll = (tries = 0) => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (tries < 20) {
+        window.requestAnimationFrame(() => attemptScroll(tries + 1));
+      }
+    };
+    if (activeTab !== 'home') {
+      setActiveTab('home');
+      window.requestAnimationFrame(() => attemptScroll(0));
+    } else {
+      attemptScroll(0);
     }
   };
 
@@ -83,200 +137,222 @@ export function Layout({ children }: { children: React.ReactNode }) {
     navItems.push({ id: 'admin', label: 'Quản trị' });
   }
 
-  const outerBg = data.settings.themeMode === 'neutral' ? 'bg-[#232328]' : 'bg-[#111113]';
-
   return (
-    <div className={`min-h-screen flex flex-col ${outerBg} text-[#F4F4F5] transition-colors duration-200`}>
+    <div className="min-h-screen flex flex-col theme-outer-shell transition-colors duration-200">
       {/* Sticky Header */}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#171719]/95 backdrop-blur-md">
-        <div className="mx-auto flex h-14 sm:h-16 max-w-[1440px] items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 lg:px-8">
-          {/* Left: Emblem + Brand Title + Fullscreen Toggle */}
-          <div className="flex items-center gap-1 sm:gap-2 min-w-0 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('home')}
-              className="flex items-center gap-2 sm:gap-3 text-left whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#F02028] rounded-lg"
-            >
-              <svg
-                viewBox="0 0 36 36"
-                className="h-8 w-8 shrink-0"
-                aria-hidden="true"
-              >
-                <rect x="2" y="2" width="32" height="32" rx="9" fill="#F02028" />
-                <path
-                  d="M18 8.5L20.7 14.3L27 15.1L22.3 19.4L23.5 25.6L18 22.5L12.5 25.6L13.7 19.4L9 15.1L15.3 14.3L18 8.5Z"
-                  fill="#FFFFFF"
-                />
-              </svg>
-              <span className="font-display text-[15px] sm:text-lg font-semibold tracking-tight text-white whitespace-nowrap shrink-0">
-                Chi đoàn Cù Chính Lan
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
-              aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
-              className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors shrink-0 cursor-pointer"
-            >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-          </div>
-
-          {/* Right: Operational Toolbar + Primary Auth Action */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="hidden lg:flex items-center gap-1 border-r border-white/10 pr-2 mr-1">
-              <button
-                type="button"
-                onClick={syncNow}
-                disabled={isSaving}
-                title={
-                  pendingMemberIds.length > 0
-                    ? 'Nhấn để đồng bộ các chỉnh sửa hồ sơ lên Cloud Firestore'
-                    : 'Đồng bộ dữ liệu Cloud Firestore'
-                }
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50 ${
-                  pendingMemberIds.length > 0
-                    ? 'border border-[#F02028] bg-[#F02028]/20 text-white hover:bg-[#F02028]/35'
-                    : 'text-zinc-300 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSaving ? 'animate-spin' : ''}`} />
-                <span>
-                  {pendingMemberIds.length > 0 ? `Cập nhật (${pendingMemberIds.length})` : 'Đồng bộ'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={undo}
-                disabled={!canUndo}
-                title="Hoàn tác (Undo)"
-                aria-label="Hoàn tác"
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Undo2 className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">Hoàn tác</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={redo}
-                disabled={!canRedo}
-                title="Làm lại (Redo)"
-                aria-label="Làm lại"
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Redo2 className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">Làm lại</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                title="Cài đặt"
-                aria-label="Cài đặt"
-                className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setHelpOpen(true)}
-                title="Trợ giúp"
-                aria-label="Trợ giúp"
-                className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              >
-                <HelpCircle className="w-4 h-4" />
-              </button>
-            </div>
-
-            {isSignedIn && currentUser ? (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => (isAdmin ? setActiveTab('admin') : setLoginOpen(true))}
-                  className={`hidden sm:inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    isAdmin
-                      ? 'border-[#F02028]/40 bg-[#F02028]/15 hover:bg-[#F02028]/25'
-                      : 'border-white/15 bg-[#242428] hover:bg-white/10'
-                  }`}
-                >
-                  {currentUser.photoURL ? (
-                    <img
-                      src={currentUser.photoURL}
-                      alt=""
-                      className="h-4 w-4 rounded-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : isAdmin ? (
-                    <Shield className="w-3.5 h-3.5 text-[#F02028]" />
-                  ) : (
-                    <UserIcon className="w-3.5 h-3.5 text-zinc-300" />
-                  )}
-                  <span className="max-w-[120px] truncate">{adminName || 'Tài khoản'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={logoutAdmin}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#242428] px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-white/10 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Đăng xuất</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setLoginOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#F02028] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#d91b23] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Đăng nhập</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              aria-label="Mở menu điều hướng"
-              className="lg:hidden rounded-lg p-2 text-zinc-300 hover:bg-white/10 hover:text-white cursor-pointer"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Navigation Links directly below Brand Title */}
-        <div className="border-t border-white/5">
+        {/* Row 1: Primary Navigation Links */}
+        <div ref={navContainerRef} className="relative">
           <nav
             className="mx-auto flex max-w-[1440px] items-center gap-5 sm:gap-6 overflow-x-auto px-3 sm:px-6 lg:px-8"
             aria-label="Điều hướng chính"
           >
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
+              const isHome = item.id === 'home';
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveTab(item.id)}
-                  className={`relative py-2.5 text-sm font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  aria-expanded={isHome ? homeSubmenuOpen : undefined}
+                  aria-haspopup={isHome ? 'menu' : undefined}
+                  onClick={() => {
+                    if (isHome) {
+                      if (activeTab !== 'home') {
+                        setActiveTab('home');
+                        setHomeSubmenuOpen(true);
+                      } else {
+                        setHomeSubmenuOpen((prev) => !prev);
+                      }
+                    } else {
+                      setHomeSubmenuOpen(false);
+                      setActiveTab(item.id);
+                    }
+                  }}
+                  className={`relative inline-flex items-center gap-1.5 py-3 text-xs sm:text-[13px] font-medium tracking-[0.04em] uppercase whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
                     isActive ? 'text-white' : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   <span>{item.label}</span>
+                  {isHome && (
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-150 ${
+                        homeSubmenuOpen ? 'rotate-180 text-white' : ''
+                      }`}
+                    />
+                  )}
                   {typeof item.count === 'number' && (
-                    <span className="ml-1.5 font-mono-num text-xs text-zinc-400">({item.count})</span>
+                    <span className="ml-0.5 font-mono-num text-[11px] text-zinc-400">({item.count})</span>
                   )}
                   {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#F02028]" />
+                    <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#F02028]" />
                   )}
                 </button>
               );
             })}
           </nav>
+
+          {/* Quick-jump submenu dropdown for Trang chủ */}
+          {homeSubmenuOpen && (
+            <div className="pointer-events-none absolute left-0 right-0 top-full z-50 pt-1.5">
+              <div className="mx-auto max-w-[1440px] px-3 sm:px-6 lg:px-8">
+                <div
+                  role="menu"
+                  aria-label="Danh mục xem nhanh Trang chủ"
+                  className="pointer-events-auto w-full max-w-sm rounded-2xl border border-white/15 bg-[#171719]/98 p-2 shadow-2xl shadow-black/70 backdrop-blur-xl"
+                >
+                  <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-400 border-b border-white/10 mb-1">
+                    Xem nhanh nội dung Trang chủ
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {homeSubmenuItems.map((sub) => (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => scrollToHomeSection(sub.id)}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs sm:text-sm text-zinc-200 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <span className="font-mono-num text-[11px] font-semibold text-[#F02028] shrink-0">
+                          {sub.num}
+                        </span>
+                        <span className="truncate">{sub.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Row 2: Operational Toolbar + Primary Auth Action aligned to the left */}
+        <div className="border-t border-white/5">
+          <div className="mx-auto flex h-14 sm:h-16 max-w-[1440px] items-center justify-start gap-2 sm:gap-4 px-3 sm:px-6 lg:px-8">
+            <div className="flex flex-1 items-center gap-1.5 min-w-0">
+              <div className="hidden lg:flex items-center gap-1 border-r border-white/10 pr-2 mr-1">
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={!canUndo}
+                  title="Hoàn tác (Undo)"
+                  aria-label="Hoàn tác"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline">Hoàn tác</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={redo}
+                  disabled={!canRedo}
+                  title="Làm lại (Redo)"
+                  aria-label="Làm lại"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Redo2 className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline">Làm lại</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  title="Cài đặt"
+                  aria-label="Cài đặt"
+                  className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHelpOpen(true)}
+                  title="Trợ giúp"
+                  aria-label="Trợ giúp"
+                  className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Thoát toàn màn hình' : 'Mở rộng toàn màn hình'}
+                  aria-label={isFullscreen ? 'Thu gọn' : 'Mở rộng'}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-white/10 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  <span>{isFullscreen ? 'Thu gọn' : 'Mở rộng'}</span>
+                </button>
+              </div>
+
+              {isSignedIn && currentUser ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => (isAdmin ? setActiveTab('admin') : setLoginOpen(true))}
+                    className={`hidden sm:inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      isAdmin
+                        ? 'border-[#F02028]/40 bg-[#F02028]/15 hover:bg-[#F02028]/25'
+                        : 'border-white/15 bg-[#242428] hover:bg-white/10'
+                    }`}
+                  >
+                    {currentUser.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt=""
+                        className="h-4 w-4 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : isAdmin ? (
+                      <Shield className="w-3.5 h-3.5 text-[#F02028]" />
+                    ) : (
+                      <UserIcon className="w-3.5 h-3.5 text-zinc-300" />
+                    )}
+                    <span className="max-w-[120px] truncate">{adminName || 'Tài khoản'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={logoutAdmin}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#242428] px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-white/10 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Đăng xuất</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setLoginOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#F02028] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#d91b23] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Đăng nhập</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Thoát toàn màn hình' : 'Mở rộng toàn màn hình'}
+                aria-label={isFullscreen ? 'Thu gọn' : 'Mở rộng'}
+                className="lg:hidden inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-white/10 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                <span>{isFullscreen ? 'Thu gọn' : 'Mở rộng'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((v) => !v)}
+                aria-label="Mở menu điều hướng"
+                className="ml-auto lg:hidden rounded-lg p-2 text-zinc-300 hover:bg-white/10 hover:text-white cursor-pointer"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Mobile / Tablet Drawer Menu */}
@@ -306,21 +382,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               })}
             </div>
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => {
-                  syncNow();
-                  setMobileMenuOpen(false);
-                }}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs cursor-pointer ${
-                  pendingMemberIds.length > 0
-                    ? 'border border-[#F02028] bg-[#F02028]/20 text-white font-semibold'
-                    : 'bg-[#242428] text-zinc-200'
-                }`}
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                {pendingMemberIds.length > 0 ? `Cập nhật (${pendingMemberIds.length})` : 'Cập nhật'}
-              </button>
               <button
                 type="button"
                 onClick={undo}
@@ -375,29 +436,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="flex-1 mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10 py-8 sm:py-12">
         {children}
       </main>
 
       {/* Clean Editorial Footer */}
-      <footer className="border-t border-white/10 bg-[#171719] mt-12">
-        <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <footer className="border-t border-white/10 bg-[#171719] mt-16">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 py-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div>
-            <div className="font-display text-base font-semibold text-white">
+            <div className="font-display text-sm sm:text-base font-semibold tracking-wide text-white">
               Hồi ký Điện tử Chi đoàn Cù Chính Lan
             </div>
-            <p className="text-xs text-zinc-400 mt-1">
+            <p className="font-editorial-serif text-sm italic text-zinc-400 mt-1">
               Đoàn trường THPT Hoàng Hoa Thám – Quận Đoàn Bình Thạnh · Lưu trữ tư liệu nhiều thế hệ
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center gap-5 text-xs text-zinc-400">
             {data.home.socialChannels.map((ch) => (
               <a
                 key={ch.id}
                 href={ch.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-white transition-colors"
+                className="hover:text-white transition-colors underline-offset-4 hover:underline"
               >
                 {ch.platform}: {ch.label}
               </a>

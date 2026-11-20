@@ -3,32 +3,32 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
-  Check,
   ChevronDown,
   ChevronUp,
-  Copy,
   Edit3,
   ExternalLink,
+  ImagePlus,
   Info,
+  Link2,
   Play,
   Plus,
   Trash2,
   Upload,
-  Users,
   Youtube,
 } from 'lucide-react';
 import { useMemoir } from '../../context/MemoirContext';
-import type { AnthemYoutubeTrack, LeaderMessage, TimelineMilestone } from '../../types/memoir';
+import type { AnthemYoutubeTrack, HeroGalleryPhoto, LeaderMessage, TimelineMilestone } from '../../types/memoir';
 import { InlineEditableText } from '../common/InlineEditableText';
 import { CollapsibleText } from '../common/CollapsibleText';
 import { ResilientImage } from '../common/ResilientMedia';
+import { HeroCoverSlideshow } from './HeroCoverSlideshow';
+import { MemoirAnalyticsSection } from './MemoirAnalyticsSection';
 import { computeMemoirStats } from '../../services/backupService';
 import { uploadOrEncodeMedia } from '../../services/indexedDb';
 import { extractYoutubeId, getYoutubeEmbedUrl } from '../../utils/youtube';
 
 export function HomeView() {
   const { data, isAdmin, setActiveTab, updateData, notify } = useMemoir();
-  const [copiedAll, setCopiedAll] = useState(false);
 
   const [addingYoutube, setAddingYoutube] = useState(false);
   const [ytTitle, setYtTitle] = useState('');
@@ -57,6 +57,11 @@ export function HomeView() {
   const [msgRole, setMsgRole] = useState('Hiệu trưởng / Ban Giám hiệu');
   const [msgPeriod, setMsgPeriod] = useState('');
   const [msgContent, setMsgContent] = useState('');
+  const [msgThumbnail, setMsgThumbnail] = useState('');
+  const [uploadingNewMsgThumb, setUploadingNewMsgThumb] = useState(false);
+  const [uploadingMsgThumbId, setUploadingMsgThumbId] = useState<string | null>(null);
+  const [editingMsgThumbUrlId, setEditingMsgThumbUrlId] = useState<string | null>(null);
+  const [msgThumbUrlDraft, setMsgThumbUrlDraft] = useState('');
 
   const anthemLyrics =
     typeof data.home.anthem.lyrics === 'string'
@@ -72,55 +77,22 @@ export function HomeView() {
     data.members.some((m) => m.dataOrigin === 'sample') ||
     data.events.some((e) => e.dataOrigin === 'sample');
 
-  const handleCopyFullMemoir = async () => {
-    const sections = [
-      data.home.hero.title.toUpperCase(),
-      data.home.hero.unitIntro,
-      data.home.hero.subtitle,
-      '',
-      `=== ${(data.home.history.sectionTitle || 'LỊCH SỬ HÌNH THÀNH').toUpperCase()} ===`,
-      data.home.history.foundingTitle,
-      data.home.history.foundingContent,
-      ...data.home.history.stages.map((s) => `- [${s.period}] ${s.title}: ${s.description}`),
-      `${data.home.history.achievementsTitle || 'Dấu ấn & Thành tựu'}: ${data.home.history.achievementsSummary}`,
-      '',
-      `=== ${(data.home.meaning.sectionTitle || 'Ý NGHĨA & MỤC TIÊU').toUpperCase()} ===`,
-      data.home.meaning.introContent,
-      `${data.home.meaning.traditionalValuesTitle || 'Giá trị truyền thống'}: ${data.home.meaning.traditionalValues}`,
-      `${data.home.meaning.memoirGoalsTitle || 'Mục tiêu hồi ký'}: ${data.home.meaning.memoirGoals}`,
-      `${data.home.meaning.generationalConnectionTitle || 'Kết nối thế hệ'}: ${data.home.meaning.generationalConnection}`,
-      '',
-      `=== ${(data.home.milestonesTitle || 'MỐC SON QUAN TRỌNG').toUpperCase()} ===`,
-      ...data.milestones.map((m) => `- (${m.year}) ${m.title}: ${m.description}`),
-      '',
-      `=== HÀNH KHÚC: ${data.home.anthem.title} ===`,
-      data.home.anthem.authorName || '',
-      data.home.anthem.composerInfo,
-      data.home.anthem.relatedInfo || '',
-      anthemLyrics,
-      ...(data.home.anthem.youtubeTracks && data.home.anthem.youtubeTracks.length > 0
-        ? [
-            `--- ${data.home.anthem.youtubeSectionTitle || 'Ca khúc do đoàn viên sáng tác (YouTube)'} ---`,
-            ...data.home.anthem.youtubeTracks.map(
-              (t) => `- ${t.title}${t.author ? ` (${t.author})` : ''}: ${t.youtubeUrl}`
-            ),
-          ]
-        : []),
-      '',
-      `=== ${(data.home.messagesTitle || 'LỜI NGỎ CỦA LÃNH ĐẠO NHÀ TRƯỜNG').toUpperCase()} ===`,
-      ...data.leaderMessages.map(
-        (l) => `${l.title} — ${l.authorName} (${l.authorRole})\n${l.content}`
-      ),
-    ];
-
-    try {
-      await navigator.clipboard.writeText(sections.join('\n'));
-      setCopiedAll(true);
-      notify('Đã sao chép toàn bộ nội dung Hồi ký vào khay nhớ tạm.', 'success');
-      setTimeout(() => setCopiedAll(false), 2500);
-    } catch {
-      notify('Trình duyệt không cho phép sao chép tự động.', 'error');
-    }
+  const handleUpdateHeroSlides = (nextSlides: HeroGalleryPhoto[], toastMessage: string) => {
+    updateData(
+      (prev) => ({
+        ...prev,
+        home: {
+          ...prev.home,
+          dataOrigin: 'real',
+          hero: {
+            ...prev.home.hero,
+            heroImage: nextSlides[0]?.url || '',
+            galleryPhotos: nextSlides,
+          },
+        },
+      }),
+      toastMessage
+    );
   };
 
   const handleAddMilestone = (e: React.FormEvent) => {
@@ -171,13 +143,15 @@ export function HomeView() {
       authorRole: msgRole.trim(),
       period: msgPeriod.trim() || 'Thư gửi Chi đoàn',
       content: msgContent.trim(),
+      ...(msgThumbnail.trim() ? { thumbnailImage: msgThumbnail.trim() } : {}),
       createdAt: new Date().toISOString().slice(0, 10),
+      orderIndex: data.leaderMessages.length,
       dataOrigin: 'real',
     };
     updateData(
       (prev) => ({
         ...prev,
-        leaderMessages: [...prev.leaderMessages, msg],
+        leaderMessages: [...prev.leaderMessages, { ...msg, orderIndex: prev.leaderMessages.length }],
       }),
       'Đã thêm lời ngỏ mới.'
     );
@@ -185,11 +159,59 @@ export function HomeView() {
     setMsgAuthor('');
     setMsgPeriod('');
     setMsgContent('');
+    setMsgThumbnail('');
     setAddingMessage(false);
   };
 
+  const updateLeaderMessageThumbnail = (messageId: string, nextUrl: string, toastMessage: string) => {
+    const cleaned = nextUrl.trim();
+    updateData(
+      (prev) => ({
+        ...prev,
+        leaderMessages: prev.leaderMessages.map((l) =>
+          l.id === messageId
+            ? { ...l, thumbnailImage: cleaned || '', dataOrigin: 'real' }
+            : l
+        ),
+      }),
+      toastMessage
+    );
+  };
+
+  const handleUploadLeaderMessageThumb = async (messageId: string, file: File) => {
+    setUploadingMsgThumbId(messageId);
+    try {
+      const res = await uploadOrEncodeMedia(file, 'image');
+      updateLeaderMessageThumbnail(messageId, res.url, 'Đã tải lên và cập nhật ảnh thumbnail lời ngỏ.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Không thể tải lên ảnh thumbnail.', 'error');
+    } finally {
+      setUploadingMsgThumbId(null);
+    }
+  };
+
+  const moveLeaderMessage = (index: number, dir: -1 | 1) => {
+    const nextIdx = index + dir;
+    if (nextIdx < 0 || nextIdx >= data.leaderMessages.length) return;
+    updateData(
+      (prev) => {
+        if (index < 0 || index >= prev.leaderMessages.length) return prev;
+        const targetIdx = index + dir;
+        if (targetIdx < 0 || targetIdx >= prev.leaderMessages.length) return prev;
+        const list = [...prev.leaderMessages];
+        const [moved] = list.splice(index, 1);
+        list.splice(targetIdx, 0, moved);
+        return {
+          ...prev,
+          leaderMessages: list.map((item, idx) => ({ ...item, orderIndex: idx })),
+        };
+      },
+      'Đã cập nhật thứ tự thông điệp.'
+    );
+  };
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-14 lg:space-y-20">
       {/* Sample vs Real Data Transparency Notice */}
       {data.settings.showSampleBanner && hasSampleData && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#171719] px-5 py-3.5 text-xs text-zinc-300">
@@ -212,11 +234,14 @@ export function HomeView() {
         </div>
       )}
 
-      {/* A. HERO SECTION */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 lg:p-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-stretch">
+      {/* A. HERO SECTION — Corporate Editorial 12-Column Split */}
+      <section
+        id="home-hero"
+        className="corp-hero-sheet editorial-open-section relative overflow-hidden scroll-mt-32 rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 lg:p-12"
+      >
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-stretch">
           <div className="lg:col-span-7 flex flex-col justify-between gap-6">
-            <div className="space-y-4">
+            <div className="space-y-5">
               <InlineEditableText
                 as="div"
                 label="Nhãn không gian hồi ký"
@@ -230,7 +255,7 @@ export function HomeView() {
                     'Đã cập nhật nhãn không gian hồi ký.'
                   )
                 }
-                className="text-xs font-medium tracking-wider uppercase text-[#F02028]"
+                className="text-xs font-medium tracking-[0.14em] uppercase text-[#F02028]"
               />
 
               <InlineEditableText
@@ -246,7 +271,7 @@ export function HomeView() {
                     'Đã cập nhật tiêu đề chính.'
                   )
                 }
-                className="font-display text-3xl sm:text-5xl lg:text-[3.25rem] font-semibold leading-[1.12] tracking-tight text-white text-balance"
+                className="font-display editorial-hero-title text-3xl sm:text-5xl lg:text-[3.5rem] font-semibold leading-[1.1] tracking-tight text-white text-balance"
               />
 
               <InlineEditableText
@@ -262,7 +287,7 @@ export function HomeView() {
                     'Đã cập nhật tên đơn vị.'
                   )
                 }
-                className="text-base sm:text-lg font-medium text-zinc-200"
+                className="font-editorial-serif text-lg sm:text-2xl italic font-medium text-zinc-200 leading-snug"
               />
 
               <InlineEditableText
@@ -279,68 +304,19 @@ export function HomeView() {
                     'Đã cập nhật phần giới thiệu.'
                   )
                 }
-                className="max-w-2xl text-sm sm:text-base leading-relaxed text-zinc-400"
+                className="max-w-xl text-sm sm:text-[15px] leading-relaxed text-zinc-300"
               />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('members')}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#F02028] px-5 py-3 text-sm font-semibold text-white hover:bg-[#d91b23] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Users className="w-4 h-4" />
-                <span>Khám phá thành viên</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCopyFullMemoir}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-[#242428] px-5 py-3 text-sm font-medium text-zinc-100 hover:bg-white/10 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                {copiedAll ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedAll ? 'Đã sao chép toàn bộ hồi ký' : 'Sao chép nhanh toàn bộ nội dung hồi ký'}</span>
-              </button>
             </div>
           </div>
 
           <div className="lg:col-span-5">
-            <div className="h-64 sm:h-80 lg:h-full overflow-hidden rounded-2xl border border-white/10 bg-[#242428]">
-              <ResilientImage
-                src={data.home.hero.heroImage}
-                alt="Không gian trường THPT Hoàng Hoa Thám – Chi đoàn Cù Chính Lan"
-                downloadFileName="anh-bia-trang-chu-chi-doan-cu-chinh-lan"
-                viewerSubtitle="Ảnh bìa Trang chủ · Hồi ký Chi đoàn Cù Chính Lan"
-                canEdit
-                onChangeImage={(nextUrl) =>
-                  updateData(
-                    (prev) => ({
-                      ...prev,
-                      home: {
-                        ...prev.home,
-                        dataOrigin: 'real',
-                        hero: { ...prev.home.hero, heroImage: nextUrl },
-                      },
-                    }),
-                    'Đã lưu ảnh bìa Trang chủ.'
-                  )
-                }
-                onDeleteImage={() =>
-                  updateData(
-                    (prev) => ({
-                      ...prev,
-                      home: {
-                        ...prev.home,
-                        dataOrigin: 'real',
-                        hero: { ...prev.home.hero, heroImage: '' },
-                      },
-                    }),
-                    'Đã xóa ảnh bìa Trang chủ.'
-                  )
-                }
-                className="h-full w-full object-cover"
-              />
-            </div>
+            <HeroCoverSlideshow
+              heroImage={data.home.hero.heroImage}
+              galleryPhotos={data.home.hero.galleryPhotos}
+              isAdmin={isAdmin}
+              onUpdateSlides={handleUpdateHeroSlides}
+              onNotify={notify}
+            />
           </div>
         </div>
 
@@ -367,8 +343,14 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* B. LỊCH SỬ HÌNH THÀNH */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 space-y-8">
+      {/* A2. REAL-DATA CORPORATE INFOGRAPHIC & ARCHIVE ANALYTICS */}
+      <MemoirAnalyticsSection />
+
+      {/* B. LỊCH SỬ HÌNH THÀNH — Crisp Corporate White Sheet */}
+      <section
+        id="home-history"
+        className="corp-white-band editorial-cream-sheet scroll-mt-32 rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 lg:p-12 space-y-8"
+      >
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-5">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-zinc-400">
@@ -411,7 +393,7 @@ export function HomeView() {
                   'Đã cập nhật tiêu đề mục Lịch sử.'
                 )
               }
-              className="font-display text-2xl sm:text-3xl font-semibold text-white text-balance"
+              className="font-display editorial-section-title text-2xl sm:text-3xl font-semibold text-white text-balance"
             />
           </div>
           {isAdmin && (
@@ -646,48 +628,53 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* C. Ý NGHĨA VÀ MỤC TIÊU */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 space-y-6">
-        <div className="border-b border-white/10 pb-5 space-y-1">
-          <InlineEditableText
-            as="div"
-            label="Nhãn mục Ý nghĩa"
-            value={data.home.meaning.sectionLabel || '02 · Sứ mệnh lưu giữ ký ức'}
-            onSave={(val) =>
-              updateData(
-                (prev) => ({
-                  ...prev,
-                  home: {
-                    ...prev.home,
-                    dataOrigin: 'real',
-                    meaning: { ...prev.home.meaning, sectionLabel: val },
-                  },
-                }),
-                'Đã cập nhật nhãn mục Ý nghĩa.'
-              )
-            }
-            className="text-xs font-medium text-zinc-400"
-          />
-          <InlineEditableText
-            as="h2"
-            label="Tiêu đề mục Ý nghĩa"
-            value={data.home.meaning.sectionTitle || 'Ý nghĩa và mục tiêu'}
-            onSave={(val) =>
-              updateData(
-                (prev) => ({
-                  ...prev,
-                  home: {
-                    ...prev.home,
-                    dataOrigin: 'real',
-                    meaning: { ...prev.home.meaning, sectionTitle: val },
-                  },
-                }),
-                'Đã cập nhật tiêu đề mục Ý nghĩa.'
-              )
-            }
-            className="font-display text-2xl sm:text-3xl font-semibold text-white"
-          />
-          <div className="pt-2 max-w-3xl">
+      {/* C. Ý NGHĨA VÀ MỤC TIÊU — Deep Navy Alternating Executive Band */}
+      <section
+        id="home-meaning"
+        className="corp-navy-band editorial-open-section relative overflow-hidden scroll-mt-32 rounded-3xl border border-white/10 border-t bg-[#171719] p-6 sm:p-10 lg:p-12 space-y-8"
+      >
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 border-b border-white/10 pb-8 items-end">
+          <div className="lg:col-span-5 space-y-2">
+            <InlineEditableText
+              as="div"
+              label="Nhãn mục Ý nghĩa"
+              value={data.home.meaning.sectionLabel || '02 · Sứ mệnh lưu giữ ký ức'}
+              onSave={(val) =>
+                updateData(
+                  (prev) => ({
+                    ...prev,
+                    home: {
+                      ...prev.home,
+                      dataOrigin: 'real',
+                      meaning: { ...prev.home.meaning, sectionLabel: val },
+                    },
+                  }),
+                  'Đã cập nhật nhãn mục Ý nghĩa.'
+                )
+              }
+              className="text-xs font-medium tracking-[0.12em] uppercase text-zinc-400"
+            />
+            <InlineEditableText
+              as="h2"
+              label="Tiêu đề mục Ý nghĩa"
+              value={data.home.meaning.sectionTitle || 'Ý nghĩa và mục tiêu'}
+              onSave={(val) =>
+                updateData(
+                  (prev) => ({
+                    ...prev,
+                    home: {
+                      ...prev.home,
+                      dataOrigin: 'real',
+                      meaning: { ...prev.home.meaning, sectionTitle: val },
+                    },
+                  }),
+                  'Đã cập nhật tiêu đề mục Ý nghĩa.'
+                )
+              }
+              className="font-display editorial-section-title text-2xl sm:text-3xl font-semibold text-white"
+            />
+          </div>
+          <div className="lg:col-span-7">
             <InlineEditableText
               as="p"
               multiline
@@ -702,13 +689,13 @@ export function HomeView() {
                   'Đã cập nhật phần giới thiệu ý nghĩa.'
                 )
               }
-              className="text-sm sm:text-base text-zinc-300 leading-relaxed"
+              className="font-editorial-serif text-base sm:text-xl italic text-zinc-200 leading-relaxed"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="rounded-2xl border border-white/10 bg-[#242428] p-6 space-y-2.5">
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="editorial-subcard rounded-2xl border border-white/10 bg-[#242428] p-6 sm:p-7 space-y-3">
             <InlineEditableText
               as="div"
               label="Tiêu đề Giá trị truyền thống"
@@ -750,7 +737,7 @@ export function HomeView() {
             />
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#242428] p-6 space-y-2.5">
+          <div className="editorial-subcard rounded-2xl border border-white/10 bg-[#242428] p-6 sm:p-7 space-y-3">
             <InlineEditableText
               as="div"
               label="Tiêu đề Mục tiêu xây dựng hồi ký"
@@ -788,7 +775,7 @@ export function HomeView() {
             />
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#242428] p-6 space-y-2.5">
+          <div className="editorial-subcard rounded-2xl border border-white/10 bg-[#242428] p-6 sm:p-7 space-y-3">
             <InlineEditableText
               as="div"
               label="Tiêu đề Giá trị kết nối các thế hệ"
@@ -832,8 +819,11 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* D. MỐC SON VÀ SỰ KIỆN QUAN TRỌNG */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 space-y-6">
+      {/* D. MỐC SON VÀ SỰ KIỆN QUAN TRỌNG — Crisp White Sheet */}
+      <section
+        id="home-milestones"
+        className="corp-white-band editorial-cream-sheet scroll-mt-32 rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 lg:p-12 space-y-7"
+      >
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-5">
           <div className="space-y-1 flex-1 min-w-0">
             <InlineEditableText
@@ -864,7 +854,7 @@ export function HomeView() {
                   'Đã cập nhật tiêu đề mục Mốc son.'
                 )
               }
-              className="font-display text-2xl sm:text-3xl font-semibold text-white"
+              className="font-display editorial-section-title text-2xl sm:text-3xl font-semibold text-white"
             />
           </div>
 
@@ -1054,9 +1044,12 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* E. HÀNH KHÚC CHI ĐOÀN */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-5">
+      {/* E. HÀNH KHÚC CHI ĐOÀN — Structured White Media/Lyrics Spread */}
+      <section
+        id="home-anthem"
+        className="corp-white-band editorial-open-section scroll-mt-32 rounded-3xl border border-white/10 border-t bg-[#171719] p-6 sm:p-10 lg:p-12 space-y-8"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div className="space-y-2 flex-1 min-w-0">
             <InlineEditableText
               as="div"
@@ -1075,7 +1068,7 @@ export function HomeView() {
                   'Đã cập nhật nhãn mục Âm vang truyền thống.'
                 )
               }
-              className="text-xs font-medium text-zinc-400"
+              className="text-xs font-medium tracking-[0.12em] uppercase text-zinc-400"
             />
             <InlineEditableText
               as="h2"
@@ -1090,7 +1083,7 @@ export function HomeView() {
                   'Đã cập nhật tên bài ca.'
                 )
               }
-              className="font-display text-2xl sm:text-3xl font-semibold text-white"
+              className="font-display editorial-section-title text-2xl sm:text-3xl font-semibold text-white"
             />
             <InlineEditableText
               as="p"
@@ -1105,7 +1098,7 @@ export function HomeView() {
                   'Đã cập nhật tên tác giả.'
                 )
               }
-              className="text-sm font-medium text-[#F02028]"
+              className="font-editorial-serif text-base sm:text-lg italic font-medium text-[#F02028]"
             />
             <InlineEditableText
               as="p"
@@ -1147,7 +1140,7 @@ export function HomeView() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Cover Image + Upload/URL Controls */}
           <div className="lg:col-span-4 space-y-3">
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#242428] aspect-[4/3]">
+            <div className="editorial-photo-frame overflow-hidden rounded-2xl border border-white/10 bg-[#242428] aspect-[4/3]">
               <ResilientImage
                 src={data.home.anthem.coverImage}
                 alt={`Ảnh bìa ${data.home.anthem.title}`}
@@ -1924,8 +1917,11 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* F. LỜI NGỎ CỦA HIỆU TRƯỞNG & LÃNH ĐẠO */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 space-y-6">
+      {/* F. LỜI NGỎ CỦA HIỆU TRƯỞNG & LÃNH ĐẠO — Crisp White Editorial Sheet */}
+      <section
+        id="home-messages"
+        className="corp-white-band editorial-cream-sheet scroll-mt-32 rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-10 lg:p-12 space-y-7"
+      >
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-5">
           <div className="space-y-1 flex-1 min-w-0">
             <InlineEditableText
@@ -1941,7 +1937,7 @@ export function HomeView() {
                   'Đã cập nhật nhãn mục Thông điệp.'
                 )
               }
-              className="text-xs font-medium text-zinc-400"
+              className="text-xs font-medium tracking-[0.12em] uppercase text-zinc-400"
             />
             <InlineEditableText
               as="h2"
@@ -1956,7 +1952,7 @@ export function HomeView() {
                   'Đã cập nhật tiêu đề mục Thông điệp.'
                 )
               }
-              className="font-display text-2xl sm:text-3xl font-semibold text-white"
+              className="font-display editorial-section-title text-2xl sm:text-3xl font-semibold text-white"
             />
           </div>
 
@@ -2018,10 +2014,69 @@ export function HomeView() {
               placeholder="Nội dung lời ngỏ, lời chúc..."
               className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
             />
+            {/* Optional Thumbnail Upload / Link for New Message */}
+            <div className="rounded-xl border border-white/10 bg-[#171719] p-3.5 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-white">Ảnh thumbnail lời ngỏ (tùy chọn)</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 rounded-lg bg-[#F02028] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{uploadingNewMsgThumb ? 'Đang tải...' : 'Tải ảnh lên'}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploadingNewMsgThumb(true);
+                        try {
+                          const res = await uploadOrEncodeMedia(file, 'image');
+                          setMsgThumbnail(res.url);
+                          notify('Đã tải ảnh thumbnail tạm thời. Nhấn "Lưu lời ngỏ" để lưu.', 'success');
+                        } catch (err) {
+                          notify(err instanceof Error ? err.message : 'Không thể tải ảnh.', 'error');
+                        } finally {
+                          setUploadingNewMsgThumb(false);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                  {msgThumbnail && (
+                    <button
+                      type="button"
+                      onClick={() => setMsgThumbnail('')}
+                      className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-[#F02028] cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa ảnh</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                {msgThumbnail && (
+                  <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-[#242428]">
+                    <img src={msgThumbnail} alt="Xem trước thumbnail" className="h-full w-full object-cover" />
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={msgThumbnail}
+                  onChange={(e) => setMsgThumbnail(e.target.value)}
+                  placeholder="Hoặc dán đường dẫn ảnh thumbnail..."
+                  className="w-full flex-1 rounded-lg border border-white/10 bg-[#242428] px-3 py-1.5 text-xs text-white focus:border-[#F02028] focus:outline-none"
+                />
+              </div>
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setAddingMessage(false)}
+                onClick={() => {
+                  setAddingMessage(false);
+                  setMsgThumbnail('');
+                }}
                 className="rounded-lg border border-white/15 px-3.5 py-1.5 text-xs text-zinc-300 cursor-pointer"
               >
                 Hủy
@@ -2042,129 +2097,311 @@ export function HomeView() {
               Chưa có lời ngỏ nào.
             </div>
           ) : (
-            data.leaderMessages.map((msg) => (
-              <article key={msg.id} className="rounded-2xl border border-white/10 bg-[#242428] p-6 sm:p-8 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <InlineEditableText
-                      as="h3"
-                      label="Tiêu đề lời ngỏ"
-                      value={msg.title}
-                      onSave={(val) =>
-                        updateData(
-                          (prev) => ({
-                            ...prev,
-                            leaderMessages: prev.leaderMessages.map((l) =>
-                              l.id === msg.id ? { ...l, title: val, dataOrigin: 'real' } : l
-                            ),
-                          }),
-                          'Đã cập nhật tiêu đề lời ngỏ.'
-                        )
-                      }
-                      className="font-display text-xl sm:text-2xl font-semibold text-white"
-                    />
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                      <InlineEditableText
-                        as="span"
-                        label="Họ tên người viết"
-                        value={msg.authorName}
-                        onSave={(val) =>
-                          updateData(
-                            (prev) => ({
-                              ...prev,
-                              leaderMessages: prev.leaderMessages.map((l) =>
-                                l.id === msg.id ? { ...l, authorName: val, dataOrigin: 'real' } : l
-                              ),
-                            }),
-                            'Đã cập nhật tên tác giả thông điệp.'
-                          )
-                        }
-                        className="font-medium text-zinc-200"
-                      />
-                      <span aria-hidden="true">·</span>
-                      <InlineEditableText
-                        as="span"
-                        label="Chức vụ / Vai trò"
-                        value={msg.authorRole}
-                        onSave={(val) =>
-                          updateData(
-                            (prev) => ({
-                              ...prev,
-                              leaderMessages: prev.leaderMessages.map((l) =>
-                                l.id === msg.id ? { ...l, authorRole: val, dataOrigin: 'real' } : l
-                              ),
-                            }),
-                            'Đã cập nhật chức vụ người viết.'
-                          )
-                        }
-                        className="text-zinc-400"
-                      />
-                      <span aria-hidden="true">·</span>
-                      <InlineEditableText
-                        as="span"
-                        label="Nhiệm kỳ / Dịp kỷ niệm"
-                        value={msg.period}
-                        onSave={(val) =>
-                          updateData(
-                            (prev) => ({
-                              ...prev,
-                              leaderMessages: prev.leaderMessages.map((l) =>
-                                l.id === msg.id ? { ...l, period: val, dataOrigin: 'real' } : l
-                              ),
-                            }),
-                            'Đã cập nhật nhiệm kỳ / dịp kỷ niệm.'
-                          )
-                        }
-                        className="text-zinc-400"
-                      />
-                      {msg.dataOrigin === 'sample' && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className="text-[#F02028]">Mẫu minh họa</span>
-                        </>
+            data.leaderMessages.map((msg, index) => (
+              <article key={msg.id} className="rounded-2xl border border-white/10 bg-[#242428] p-6 sm:p-8">
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  {/* Thumbnail hình ảnh bên cạnh tiêu đề, lời ngỏ & nội dung thông điệp */}
+                  <div className="w-full sm:w-52 md:w-56 shrink-0 space-y-2.5">
+                    <div
+                      className={`overflow-hidden rounded-xl aspect-[4/3] ${
+                        msg.thumbnailImage
+                          ? 'editorial-photo-frame border border-white/10 bg-[#171719]'
+                          : 'border border-dashed border-white/20 bg-[#171719]'
+                      }`}
+                    >
+                      {msg.thumbnailImage ? (
+                        <ResilientImage
+                          src={msg.thumbnailImage}
+                          alt={`Ảnh minh họa ${msg.title}`}
+                          downloadFileName={`loi-ngo-${msg.authorName || msg.title}`}
+                          viewerSubtitle={`${msg.authorName}${msg.authorRole ? ` · ${msg.authorRole}` : ''}`}
+                          canEdit={isAdmin}
+                          onChangeImage={(nextUrl) =>
+                            updateLeaderMessageThumbnail(
+                              msg.id,
+                              nextUrl,
+                              'Đã lưu và cập nhật ảnh thumbnail lời ngỏ.'
+                            )
+                          }
+                          onDeleteImage={() =>
+                            updateLeaderMessageThumbnail(msg.id, '', 'Đã xóa ảnh thumbnail lời ngỏ.')
+                          }
+                          className="h-full w-full object-cover"
+                        />
+                      ) : isAdmin ? (
+                        <label className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-zinc-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer">
+                          <ImagePlus className="w-7 h-7 text-[#F02028]" />
+                          <span className="text-xs font-medium">
+                            {uploadingMsgThumbId === msg.id ? 'Đang tải ảnh...' : 'Tải ảnh thumbnail'}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              await handleUploadLeaderMessageThumb(msg.id, file);
+                              e.target.value = '';
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-zinc-400">
+                          <ImagePlus className="w-6 h-6 opacity-50" />
+                          <span className="text-[11px]">Chưa có ảnh minh họa</span>
+                        </div>
                       )}
                     </div>
-                  </div>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateData(
-                          (prev) => ({
-                            ...prev,
-                            leaderMessages: prev.leaderMessages.filter((l) => l.id !== msg.id),
-                          }),
-                          'Đã xóa lời ngỏ.'
-                        )
-                      }
-                      aria-label="Xóa lời ngỏ"
-                      className="self-start rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-[#F02028] cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
 
-                <div className="max-w-3xl border-t border-white/10 pt-4">
-                  <InlineEditableText
-                    as="p"
-                    multiline
-                    collapsedLines={3}
-                    label="Nội dung lời ngỏ"
-                    value={msg.content}
-                    onSave={(val) =>
-                      updateData(
-                        (prev) => ({
-                          ...prev,
-                          leaderMessages: prev.leaderMessages.map((l) =>
-                            l.id === msg.id ? { ...l, content: val, dataOrigin: 'real' } : l
-                          ),
-                        }),
-                        'Đã cập nhật nội dung lời ngỏ.'
-                      )
-                    }
-                    className="whitespace-pre-line text-sm sm:text-base leading-relaxed text-zinc-200"
-                  />
+                    {isAdmin && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label className="inline-flex items-center gap-1 rounded-lg bg-[#F02028] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#d91b23] transition-colors cursor-pointer">
+                            <Upload className="w-3 h-3" />
+                            <span>
+                              {uploadingMsgThumbId === msg.id
+                                ? 'Đang tải...'
+                                : msg.thumbnailImage
+                                  ? 'Đổi ảnh'
+                                  : 'Tải lên'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png,image/webp"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                await handleUploadLeaderMessageThumb(msg.id, file);
+                                e.target.value = '';
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editingMsgThumbUrlId === msg.id) {
+                                setEditingMsgThumbUrlId(null);
+                              } else {
+                                setMsgThumbUrlDraft(msg.thumbnailImage || '');
+                                setEditingMsgThumbUrlId(msg.id);
+                              }
+                            }}
+                            title="Nhập hoặc thay đổi đường dẫn ảnh"
+                            className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-[#171719] px-2.5 py-1.5 text-[11px] font-medium text-zinc-200 hover:bg-white/10 transition-colors cursor-pointer"
+                          >
+                            <Link2 className="w-3 h-3" />
+                            <span>Link ảnh</span>
+                          </button>
+
+                          {msg.thumbnailImage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateLeaderMessageThumbnail(msg.id, '', 'Đã xóa ảnh thumbnail lời ngỏ.')
+                              }
+                              title="Xóa ảnh thumbnail"
+                              aria-label="Xóa ảnh thumbnail"
+                              className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-[#171719] px-2 py-1.5 text-[11px] font-medium text-zinc-300 hover:border-[#F02028] hover:text-[#F02028] transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Xóa</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {editingMsgThumbUrlId === msg.id && (
+                          <div className="flex flex-col gap-1.5 rounded-lg border border-white/15 bg-[#171719] p-2">
+                            <input
+                              type="text"
+                              value={msgThumbUrlDraft}
+                              onChange={(e) => setMsgThumbUrlDraft(e.target.value)}
+                              placeholder="Dán link ảnh (https://...)"
+                              className="w-full rounded-md border border-white/15 bg-[#242428] px-2.5 py-1.5 text-xs text-white focus:border-[#F02028] focus:outline-none"
+                            />
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingMsgThumbUrlId(null)}
+                                className="rounded-md border border-white/15 px-2.5 py-1 text-[11px] text-zinc-300 cursor-pointer"
+                              >
+                                Hủy
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateLeaderMessageThumbnail(
+                                    msg.id,
+                                    msgThumbUrlDraft,
+                                    msgThumbUrlDraft.trim()
+                                      ? 'Đã lưu và cập nhật ảnh thumbnail lời ngỏ.'
+                                      : 'Đã xóa ảnh thumbnail lời ngỏ.'
+                                  );
+                                  setEditingMsgThumbUrlId(null);
+                                }}
+                                className="rounded-md bg-[#F02028] px-2.5 py-1 text-[11px] font-semibold text-white cursor-pointer"
+                              >
+                                Lưu & Cập nhật
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tiêu đề, thông tin người viết & nội dung thông điệp */}
+                  <div className="flex-1 min-w-0 w-full space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <InlineEditableText
+                          as="h3"
+                          label="Tiêu đề lời ngỏ"
+                          value={msg.title}
+                          onSave={(val) =>
+                            updateData(
+                              (prev) => ({
+                                ...prev,
+                                leaderMessages: prev.leaderMessages.map((l) =>
+                                  l.id === msg.id ? { ...l, title: val, dataOrigin: 'real' } : l
+                                ),
+                              }),
+                              'Đã cập nhật tiêu đề lời ngỏ.'
+                            )
+                          }
+                          className="font-display text-xl sm:text-2xl font-semibold text-white"
+                        />
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                          <InlineEditableText
+                            as="span"
+                            label="Họ tên người viết"
+                            value={msg.authorName}
+                            onSave={(val) =>
+                              updateData(
+                                (prev) => ({
+                                  ...prev,
+                                  leaderMessages: prev.leaderMessages.map((l) =>
+                                    l.id === msg.id ? { ...l, authorName: val, dataOrigin: 'real' } : l
+                                  ),
+                                }),
+                                'Đã cập nhật tên tác giả thông điệp.'
+                              )
+                            }
+                            className="font-medium text-zinc-200"
+                          />
+                          <span aria-hidden="true">·</span>
+                          <InlineEditableText
+                            as="span"
+                            label="Chức vụ / Vai trò"
+                            value={msg.authorRole}
+                            onSave={(val) =>
+                              updateData(
+                                (prev) => ({
+                                  ...prev,
+                                  leaderMessages: prev.leaderMessages.map((l) =>
+                                    l.id === msg.id ? { ...l, authorRole: val, dataOrigin: 'real' } : l
+                                  ),
+                                }),
+                                'Đã cập nhật chức vụ người viết.'
+                              )
+                            }
+                            className="text-zinc-400"
+                          />
+                          <span aria-hidden="true">·</span>
+                          <InlineEditableText
+                            as="span"
+                            label="Nhiệm kỳ / Dịp kỷ niệm"
+                            value={msg.period}
+                            onSave={(val) =>
+                              updateData(
+                                (prev) => ({
+                                  ...prev,
+                                  leaderMessages: prev.leaderMessages.map((l) =>
+                                    l.id === msg.id ? { ...l, period: val, dataOrigin: 'real' } : l
+                                  ),
+                                }),
+                                'Đã cập nhật nhiệm kỳ / dịp kỷ niệm.'
+                              )
+                            }
+                            className="text-zinc-400"
+                          />
+                          {msg.dataOrigin === 'sample' && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-[#F02028]">Mẫu minh họa</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-1.5 shrink-0 self-start">
+                          <button
+                            type="button"
+                            onClick={() => moveLeaderMessage(index, -1)}
+                            disabled={index === 0}
+                            aria-label="Di chuyển lời ngỏ lên trên"
+                            title="Di chuyển lên"
+                            className="rounded-lg border border-white/15 bg-white/5 p-2 text-zinc-200 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveLeaderMessage(index, 1)}
+                            disabled={index === data.leaderMessages.length - 1}
+                            aria-label="Di chuyển lời ngỏ xuống dưới"
+                            title="Di chuyển xuống"
+                            className="rounded-lg border border-white/15 bg-white/5 p-2 text-zinc-200 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateData(
+                                (prev) => ({
+                                  ...prev,
+                                  leaderMessages: prev.leaderMessages
+                                    .filter((l) => l.id !== msg.id)
+                                    .map((l, idx) => ({ ...l, orderIndex: idx })),
+                                }),
+                                'Đã xóa lời ngỏ.'
+                              )
+                            }
+                            aria-label="Xóa lời ngỏ"
+                            title="Xóa lời ngỏ"
+                            className="rounded-lg border border-white/10 bg-white/5 p-2 text-zinc-400 hover:bg-white/10 hover:text-[#F02028] cursor-pointer transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="max-w-3xl border-t border-white/10 pt-4">
+                      <InlineEditableText
+                        as="p"
+                        multiline
+                        collapsedLines={3}
+                        label="Nội dung lời ngỏ"
+                        value={msg.content}
+                        onSave={(val) =>
+                          updateData(
+                            (prev) => ({
+                              ...prev,
+                              leaderMessages: prev.leaderMessages.map((l) =>
+                                l.id === msg.id ? { ...l, content: val, dataOrigin: 'real' } : l
+                              ),
+                            }),
+                            'Đã cập nhật nội dung lời ngỏ.'
+                          )
+                        }
+                        className="whitespace-pre-line text-sm sm:text-base leading-relaxed text-zinc-200"
+                      />
+                    </div>
+                  </div>
                 </div>
               </article>
             ))

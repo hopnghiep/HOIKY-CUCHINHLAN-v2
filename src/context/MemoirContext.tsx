@@ -1,7 +1,23 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import { INITIAL_MEMOIR_DATA, SCHEMA_VERSION } from '../data/initialData';
-import type { ActiveTab, AppSettings, MemberProfile, MemoirDatabase, SchoolEvent } from '../types/memoir';
+import type {
+  ActiveTab,
+  AppSettings,
+  FontPreset,
+  FrameStyle,
+  MemberProfile,
+  MemoirDatabase,
+  SchoolEvent,
+  ThemeMode,
+} from '../types/memoir';
+import {
+  getThemeMeta,
+  normalizeFontPreset,
+  normalizeFrameStyle,
+  normalizeThemeMode,
+  resolveEffectiveFontPreset,
+} from '../constants/themes';
 import {
   listPreRestoreBackups,
   loadMemoirFromIndexedDB,
@@ -76,6 +92,13 @@ interface MemoirContextValue {
   restoreFromPackage: (nextDb: MemoirDatabase, reason?: string) => Promise<void>;
   restoreFromSnapshot: (snapshotId: string) => Promise<void>;
   clearSampleData: () => Promise<void>;
+  displaySettings: {
+    themeMode: ThemeMode;
+    fontPreset: FontPreset;
+    frameStyle: FrameStyle;
+  };
+  hasLocalDisplayOverride: boolean;
+  resetLocalDisplayPrefs: () => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
   fetchAdminsList: () => Promise<AdminRecordItem[]>;
   addAdminByUid: (uid: string, email: string, displayName: string) => Promise<void>;
@@ -86,8 +109,57 @@ const MemoirContext = createContext<MemoirContextValue | null>(null);
 
 const MAX_HISTORY = 35;
 
+const DISPLAY_PREFS_STORAGE_KEY = 'ccl_memoir_display_prefs_v4';
+const CORPORATE_UPGRADE_MARKER = 'ccl_corporate_blue_v4_ready';
+
+interface LocalDisplayPrefs {
+  themeMode?: ThemeMode;
+  fontPreset?: FontPreset;
+  frameStyle?: FrameStyle;
+}
+
+function readLocalDisplayPrefs(): LocalDisplayPrefs {
+  const corporateDefault: LocalDisplayPrefs = {
+    themeMode: 'corporate_blue',
+    fontPreset: 'corporate_inter',
+    frameStyle: 'modern',
+  };
+  try {
+    const raw = window.localStorage.getItem(DISPLAY_PREFS_STORAGE_KEY);
+    if (!raw) {
+      if (!window.localStorage.getItem(CORPORATE_UPGRADE_MARKER)) {
+        window.localStorage.setItem(CORPORATE_UPGRADE_MARKER, '1');
+        window.localStorage.setItem(DISPLAY_PREFS_STORAGE_KEY, JSON.stringify(corporateDefault));
+        return corporateDefault;
+      }
+      return {};
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const next: LocalDisplayPrefs = {};
+    if (parsed.themeMode !== undefined) next.themeMode = normalizeThemeMode(parsed.themeMode);
+    if (parsed.fontPreset !== undefined) next.fontPreset = normalizeFontPreset(parsed.fontPreset);
+    if (parsed.frameStyle !== undefined) next.frameStyle = normalizeFrameStyle(parsed.frameStyle);
+    return next;
+  } catch {
+    return corporateDefault;
+  }
+}
+
+function writeLocalDisplayPrefs(prefs: LocalDisplayPrefs) {
+  try {
+    if (Object.keys(prefs).length === 0) {
+      window.localStorage.removeItem(DISPLAY_PREFS_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(DISPLAY_PREFS_STORAGE_KEY, JSON.stringify(prefs));
+    }
+  } catch {
+    // Ignore storage quota / privacy mode restrictions
+  }
+}
+
 export function MemoirProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<MemoirDatabase>(INITIAL_MEMOIR_DATA);
+  const [localDisplayPrefs, setLocalDisplayPrefs] = useState<LocalDisplayPrefs>(() => readLocalDisplayPrefs());
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -121,6 +193,7 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
   const lastCloudDbRef = useRef<MemoirDatabase | null>(null);
   const seedingInProgressRef = useRef(false);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authSeqRef = useRef(0);
 
   const notify = useCallback((text: string, type: ToastMessage['type'] = 'info') => {
     const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -210,13 +283,14 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
   // Firebase Auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      currentUserRef.current = user;
+      const seq = ++authSeqRef.current;
 
       if (!user) {
         clearStoredAdminToken();
-        setIsAdmin(false);
+        currentUserRef.current = null;
         isAdminRef.current = false;
+        setCurrentUser(null);
+        setIsAdmin(false);
         setFirestoreSynced(false);
         trackerRef.current = createEmptySyncTracker();
         lastCloudDbRef.current = null;
@@ -226,18 +300,25 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const idToken = await user.getIdToken();
+        if (seq !== authSeqRef.current) return;
         setStoredAdminToken(idToken);
         const adminStatus = await checkIsUserAdmin(user);
-        setIsAdmin(adminStatus);
+        if (seq !== authSeqRef.current) return;
+        currentUserRef.current = user;
         isAdminRef.current = adminStatus;
+        setCurrentUser(user);
+        setIsAdmin(adminStatus);
+        setAuthReady(true);
         await syncUserAccountDoc(user, adminStatus).catch((err) => {
           console.warn('Could not sync user account doc:', err);
         });
       } catch (err) {
+        if (seq !== authSeqRef.current) return;
         console.error('Auth initialization error:', err);
-        setIsAdmin(false);
+        currentUserRef.current = user;
         isAdminRef.current = false;
-      } finally {
+        setCurrentUser(user);
+        setIsAdmin(false);
         setAuthReady(true);
       }
     });
@@ -296,25 +377,60 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
     };
   }, [authReady, currentUser, isAdmin, notify]);
 
-  // Apply theme class to document root
+  const displaySettings = useMemo(
+    () => ({
+      themeMode: normalizeThemeMode(localDisplayPrefs.themeMode ?? data.settings.themeMode),
+      fontPreset: normalizeFontPreset(localDisplayPrefs.fontPreset ?? data.settings.fontPreset),
+      frameStyle: normalizeFrameStyle(localDisplayPrefs.frameStyle ?? data.settings.frameStyle),
+    }),
+    [
+      localDisplayPrefs.themeMode,
+      localDisplayPrefs.fontPreset,
+      localDisplayPrefs.frameStyle,
+      data.settings.themeMode,
+      data.settings.fontPreset,
+      data.settings.frameStyle,
+    ]
+  );
+
+  const hasLocalDisplayOverride =
+    localDisplayPrefs.themeMode !== undefined ||
+    localDisplayPrefs.fontPreset !== undefined ||
+    localDisplayPrefs.frameStyle !== undefined;
+
+  // Apply theme, typography, and frame attributes to document root
   useEffect(() => {
     const html = document.documentElement;
-    if (data.settings.themeMode === 'neutral') {
+    const theme = displaySettings.themeMode;
+    const effectiveFont = resolveEffectiveFontPreset(theme, displaySettings.fontPreset);
+    const frame = displaySettings.frameStyle;
+    const meta = getThemeMeta(theme);
+
+    html.dataset.theme = theme;
+    html.dataset.font = effectiveFont;
+    html.dataset.frame = frame;
+
+    if (meta.isLight || theme === 'neutral') {
       html.classList.remove('dark');
     } else {
       html.classList.add('dark');
     }
-  }, [data.settings.themeMode]);
+  }, [displaySettings.themeMode, displaySettings.fontPreset, displaySettings.frameStyle]);
 
   const persistDatabase = useCallback(
-    async (nextDb: MemoirDatabase, pushToCloud: boolean, forceFullWrite = false) => {
+    async (
+      nextDb: MemoirDatabase,
+      pushToCloud: boolean,
+      forceFullWrite = false,
+      fallbackPrevDb: MemoirDatabase | null = null
+    ) => {
       setIsSaving(true);
       try {
         await saveMemoirToIndexedDB(nextDb);
         const user = currentUserRef.current;
         if (pushToCloud && user && isAdminRef.current) {
           await syncFullMemoirToFirestore(
-            lastCloudDbRef.current,
+            lastCloudDbRef.current ?? fallbackPrevDb,
             nextDb,
             user.uid,
             trackerRef.current,
@@ -338,14 +454,14 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
   );
 
   const scheduleCloudSync = useCallback(
-    (nextDb: MemoirDatabase, label?: string) => {
+    (nextDb: MemoirDatabase, label?: string, fallbackPrevDb: MemoirDatabase | null = null) => {
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
       }
       // Save locally right away for instant resilience, debounce Firestore write slightly for keystrokes
       saveMemoirToIndexedDB(nextDb).catch(() => {});
       syncTimerRef.current = setTimeout(() => {
-        persistDatabase(nextDb, true, false)
+        persistDatabase(nextDb, true, false, fallbackPrevDb)
           .then(() => {
             if (label) {
               notify(label, 'success');
@@ -371,10 +487,11 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
 
       setHistoryPast((past) => [...past.slice(-(MAX_HISTORY - 1)), current]);
       setHistoryFuture([]);
+      dataRef.current = nextDb;
       setData(nextDb);
 
-      if (nextDb.settings.autoSaveEnabled) {
-        scheduleCloudSync(nextDb, label);
+      if (nextDb.settings.autoSaveEnabled || (isAdminRef.current && currentUserRef.current)) {
+        scheduleCloudSync(nextDb, label, current);
       } else {
         saveMemoirToIndexedDB(nextDb).catch(() => {});
       }
@@ -390,10 +507,12 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
     (updatedMember: MemberProfile, label?: string) => {
       const current = dataRef.current;
       const user = currentUserRef.current;
+      const nowIso = new Date().toISOString();
+
       const nextDb: MemoirDatabase = {
         ...current,
         schemaVersion: SCHEMA_VERSION,
-        lastModified: new Date().toISOString(),
+        lastModified: nowIso,
         members: current.members.map((m) =>
           m.id === updatedMember.id
             ? {
@@ -403,7 +522,7 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
                 orderIndex: m.orderIndex,
                 ownerUid: isAdminRef.current ? updatedMember.ownerUid : m.ownerUid,
                 dataOrigin: 'real',
-                updatedAt: new Date().toISOString(),
+                updatedAt: nowIso,
               }
             : m
         ),
@@ -415,31 +534,72 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
       setData(nextDb);
 
       if (isAdminRef.current && user) {
-        persistDatabase(nextDb, true, false)
+        persistDatabase(nextDb, true, false, current)
           .then(() => {
             if (label) notify(label, 'success');
           })
           .catch((err) => {
             notify(formatFirestoreUserMessage(err), 'error');
           });
-      } else {
-        setPendingMemberIds((ids) => {
-          const nextIds = ids.includes(updatedMember.id) ? ids : [...ids, updatedMember.id];
-          pendingMemberIdsRef.current = nextIds;
-          return nextIds;
-        });
-        saveMemoirToIndexedDB(nextDb)
-          .then(() => {
+        return;
+      }
+
+      const targetMember = nextDb.members.find((m) => m.id === updatedMember.id);
+      if (!targetMember) return;
+
+      void (async () => {
+        setIsSaving(true);
+        try {
+          await saveMemoirToIndexedDB(nextDb).catch(() => {});
+
+          if (user && targetMember.ownerUid === user.uid) {
+            await saveSelfMemberToFirestore(targetMember, user.uid, false, trackerRef.current);
+            // Best-effort mirror to local server store
+            fetch(`/api/members/${encodeURIComponent(targetMember.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ member: targetMember, seedDatabase: nextDb }),
+            }).catch(() => {});
+            setPendingMemberIds((ids) => {
+              const nextIds = ids.filter((id) => id !== targetMember.id);
+              pendingMemberIdsRef.current = nextIds;
+              return nextIds;
+            });
             setLastSavedAt(new Date().toISOString());
             if (label !== '') {
-              notify(
-                label || 'Đã lưu thay đổi cục bộ. Nhấn nút "Cập nhật lên App" để lưu vào ứng dụng.',
-                'info'
-              );
+              notify(label || 'Đã tự động lưu hồ sơ lên Cloud Firestore.', 'success');
             }
-          })
-          .catch(() => {});
-      }
+          } else {
+            const res = await fetch(`/api/members/${encodeURIComponent(targetMember.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ member: targetMember, seedDatabase: nextDb }),
+            });
+            if (!res.ok) {
+              const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(errJson.error || 'Không thể tự động cập nhật hồ sơ lên máy chủ.');
+            }
+            setPendingMemberIds((ids) => {
+              const nextIds = ids.filter((id) => id !== targetMember.id);
+              pendingMemberIdsRef.current = nextIds;
+              return nextIds;
+            });
+            setLastSavedAt(new Date().toISOString());
+            if (label !== '') {
+              notify(label || 'Đã tự động lưu và cập nhật hồ sơ thành viên.', 'success');
+            }
+          }
+        } catch (err) {
+          setPendingMemberIds((ids) => {
+            const nextIds = ids.includes(targetMember.id) ? ids : [...ids, targetMember.id];
+            pendingMemberIdsRef.current = nextIds;
+            return nextIds;
+          });
+          notify(formatFirestoreUserMessage(err), 'error');
+        } finally {
+          setIsSaving(false);
+        }
+      })();
     },
     [notify, persistDatabase]
   );
@@ -589,7 +749,7 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
       try {
         if (user && isAdminRef.current) {
           await refreshFirebaseIdToken().catch(() => {});
-          await persistDatabase(nextDb, true, false);
+          await persistDatabase(nextDb, true, false, current);
           // Also ensure event endpoint is mirrored
           fetch(`/api/events/${encodeURIComponent(normalizedEvent.id)}`, {
             method: 'PUT',
@@ -631,9 +791,11 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
       if (past.length === 0) return past;
       const previous = past[past.length - 1];
       const rest = past.slice(0, -1);
-      setHistoryFuture((future) => [dataRef.current, ...future]);
+      const beforeUndo = dataRef.current;
+      setHistoryFuture((future) => [beforeUndo, ...future]);
+      dataRef.current = previous;
       setData(previous);
-      persistDatabase(previous, true, false).catch((err) => {
+      persistDatabase(previous, true, false, beforeUndo).catch((err) => {
         notify(formatFirestoreUserMessage(err), 'error');
       });
       notify('Đã hoàn tác thao tác gần nhất.', 'info');
@@ -646,9 +808,11 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
       if (future.length === 0) return future;
       const next = future[0];
       const rest = future.slice(1);
-      setHistoryPast((past) => [...past, dataRef.current]);
+      const beforeRedo = dataRef.current;
+      setHistoryPast((past) => [...past, beforeRedo]);
+      dataRef.current = next;
       setData(next);
-      persistDatabase(next, true, false).catch((err) => {
+      persistDatabase(next, true, false, beforeRedo).catch((err) => {
         notify(formatFirestoreUserMessage(err), 'error');
       });
       notify('Đã làm lại thao tác vừa hoàn tác.', 'info');
@@ -807,15 +971,64 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
     notify('Đã gỡ bỏ toàn bộ dữ liệu mẫu minh họa trên Cloud Firestore.', 'success');
   }, [notify, persistDatabase, refreshBackups]);
 
+  const resetLocalDisplayPrefs = useCallback(() => {
+    setLocalDisplayPrefs({});
+    writeLocalDisplayPrefs({});
+    notify('Đã khôi phục giao diện mặc định của Chi đoàn.', 'info');
+  }, [notify]);
+
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
-      updateData((prev) => ({
-        ...prev,
-        settings: {
-          ...prev.settings,
-          ...patch,
-        },
-      }));
+      const hasDisplayPatch =
+        patch.themeMode !== undefined ||
+        patch.fontPreset !== undefined ||
+        patch.frameStyle !== undefined;
+
+      if (isAdminRef.current && currentUserRef.current) {
+        if (hasDisplayPatch) {
+          setLocalDisplayPrefs((prev) => {
+            const next = { ...prev };
+            if (patch.themeMode !== undefined) delete next.themeMode;
+            if (patch.fontPreset !== undefined) delete next.fontPreset;
+            if (patch.frameStyle !== undefined) delete next.frameStyle;
+            writeLocalDisplayPrefs(next);
+            return next;
+          });
+        }
+        updateData((prev) => ({
+          ...prev,
+          settings: {
+            ...prev.settings,
+            ...patch,
+          },
+        }));
+      } else {
+        if (hasDisplayPatch) {
+          setLocalDisplayPrefs((prev) => {
+            const next: LocalDisplayPrefs = {
+              ...prev,
+              ...(patch.themeMode !== undefined ? { themeMode: normalizeThemeMode(patch.themeMode) } : {}),
+              ...(patch.fontPreset !== undefined ? { fontPreset: normalizeFontPreset(patch.fontPreset) } : {}),
+              ...(patch.frameStyle !== undefined ? { frameStyle: normalizeFrameStyle(patch.frameStyle) } : {}),
+            };
+            writeLocalDisplayPrefs(next);
+            return next;
+          });
+        }
+        const nonDisplayPatch: Partial<AppSettings> = {};
+        if (patch.showSampleBanner !== undefined) nonDisplayPatch.showSampleBanner = patch.showSampleBanner;
+        if (patch.autoSaveEnabled !== undefined) nonDisplayPatch.autoSaveEnabled = patch.autoSaveEnabled;
+        if (patch.compactCards !== undefined) nonDisplayPatch.compactCards = patch.compactCards;
+        if (Object.keys(nonDisplayPatch).length > 0) {
+          setData((prev) => ({
+            ...prev,
+            settings: {
+              ...prev.settings,
+              ...nonDisplayPatch,
+            },
+          }));
+        }
+      }
     },
     [updateData]
   );
@@ -894,6 +1107,9 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
         restoreFromPackage,
         restoreFromSnapshot,
         clearSampleData,
+        displaySettings,
+        hasLocalDisplayOverride,
+        resetLocalDisplayPrefs,
         updateSettings,
         fetchAdminsList,
         addAdminByUid,

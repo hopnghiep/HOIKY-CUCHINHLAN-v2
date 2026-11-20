@@ -10,8 +10,15 @@ export function computeMemoirStats(db: MemoirDatabase) {
     db.members.reduce((sum, m) => sum + (m.articles?.length || 0), 0);
 
   let imagesCount = 0;
-  if (db.home.hero.heroImage) imagesCount += 1;
+  if (db.home.hero.galleryPhotos && db.home.hero.galleryPhotos.length > 0) {
+    imagesCount += db.home.hero.galleryPhotos.length;
+  } else if (db.home.hero.heroImage) {
+    imagesCount += 1;
+  }
   if (db.home.anthem.coverImage) imagesCount += 1;
+  for (const msg of db.leaderMessages) {
+    if (msg.thumbnailImage) imagesCount += 1;
+  }
   for (const m of db.members) {
     if (m.youthPhoto) imagesCount += 1;
     if (m.presentPhoto) imagesCount += 1;
@@ -53,7 +60,18 @@ export async function buildExportPackage(db: MemoirDatabase): Promise<BackupPack
   const cloned = structuredClone(db);
 
   cloned.home.hero.heroImage = await inlineLocalUploadUrl(cloned.home.hero.heroImage);
+  if (Array.isArray(cloned.home.hero.galleryPhotos)) {
+    for (const gp of cloned.home.hero.galleryPhotos) {
+      gp.url = await inlineLocalUploadUrl(gp.url);
+    }
+  }
   cloned.home.anthem.coverImage = await inlineLocalUploadUrl(cloned.home.anthem.coverImage);
+
+  for (const msg of cloned.leaderMessages) {
+    if (msg.thumbnailImage) {
+      msg.thumbnailImage = await inlineLocalUploadUrl(msg.thumbnailImage);
+    }
+  }
 
   for (const member of cloned.members) {
     member.youthPhoto = await inlineLocalUploadUrl(member.youthPhoto);

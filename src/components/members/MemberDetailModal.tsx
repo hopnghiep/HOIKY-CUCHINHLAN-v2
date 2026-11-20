@@ -30,7 +30,7 @@ import {
 import { useMemoir } from '../../context/MemoirContext';
 import type { MemberDocument, MemberProfile, MemberYoutubeVideo } from '../../types/memoir';
 import { ResilientImage } from '../common/ResilientMedia';
-import { CollapsibleText } from '../common/CollapsibleText';
+import { InlineEditableText } from '../common/InlineEditableText';
 import { uploadOrEncodeDocument, uploadOrEncodeMedia } from '../../services/indexedDb';
 import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl } from '../../utils/youtube';
 
@@ -96,6 +96,18 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
     ? data.leaderMessages.filter((msg) => (memberCohort.linkedMessageIds || []).includes(msg.id))
     : [];
 
+  const saveMemberPatch = (patch: Partial<MemberProfile>, toastMessage: string) => {
+    updateSelfMemberProfile(
+      {
+        ...member,
+        ...patch,
+        dataOrigin: 'real',
+        updatedAt: new Date().toISOString(),
+      },
+      toastMessage
+    );
+  };
+
   const handleQuickPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -118,9 +130,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
           dataOrigin: 'real',
           updatedAt: new Date().toISOString(),
         },
-        isAdmin
-          ? `Đã thêm ${added.length} ảnh hoạt động cho ${member.fullName}.`
-          : `Đã thêm ${added.length} ảnh hoạt động. Nhấn "Cập nhật" để lưu lên ứng dụng.`
+        `Đã thêm và lưu ${added.length} ảnh hoạt động cho ${member.fullName}.`
       );
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Lỗi tải ảnh.', 'error');
@@ -148,9 +158,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
           },
         ],
       },
-      isAdmin
-        ? 'Đã thêm bài viết chia sẻ mới.'
-        : 'Đã thêm bài viết chia sẻ. Nhấn "Cập nhật" để lưu lên ứng dụng.'
+      'Đã thêm và lưu bài viết chia sẻ mới.'
     );
     setNewArticleTitle('');
     setNewArticleContent('');
@@ -202,9 +210,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
         dataOrigin: 'real',
         updatedAt: new Date().toISOString(),
       },
-      isAdmin
-        ? 'Đã thêm liên kết YouTube vào hồ sơ.'
-        : 'Đã thêm liên kết YouTube. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+      'Đã thêm và lưu liên kết YouTube vào hồ sơ.'
     );
     setNewYoutubeUrl('');
     setNewYoutubeTitle('');
@@ -238,9 +244,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
           dataOrigin: 'real',
           updatedAt: new Date().toISOString(),
         },
-        isAdmin
-          ? `Đã tải lên ${added.length} tài liệu cá nhân cho ${member.fullName}.`
-          : `Đã tải lên ${added.length} tài liệu. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.`
+        `Đã tải lên và lưu ${added.length} tài liệu cá nhân cho ${member.fullName}.`
       );
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Lỗi tải tài liệu.', 'error');
@@ -278,9 +282,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
         dataOrigin: 'real',
         updatedAt: new Date().toISOString(),
       },
-      isAdmin
-        ? 'Đã lưu liên kết tài liệu cá nhân.'
-        : 'Đã lưu liên kết tài liệu. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+      'Đã lưu liên kết tài liệu cá nhân.'
     );
     setNewDocTitle('');
     setNewDocUrl('');
@@ -312,9 +314,14 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
               {memberCohort ? ` · ${memberCohort.name}` : ''}
               {member.dataOrigin === 'sample' ? ' · Hồ sơ mẫu minh họa' : ''}
             </div>
-            <h2 id="member-detail-title" className="truncate font-display text-xl sm:text-2xl font-semibold text-white">
-              {member.fullName}
-            </h2>
+            <InlineEditableText
+              as="h2"
+              value={member.fullName}
+              canEdit={editable}
+              label="Họ và tên thành viên"
+              onSave={(val) => saveMemberPatch({ fullName: val }, `Đã cập nhật họ tên thành "${val}".`)}
+              className="truncate font-display text-xl sm:text-2xl font-semibold text-white"
+            />
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -383,7 +390,17 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     />
                   </div>
                   <div className="text-center text-xs font-medium text-zinc-300 truncate">
-                    {member.cohortLabel || 'Niên khóa'}
+                    <InlineEditableText
+                      as="span"
+                      inline
+                      value={member.cohortLabel || ''}
+                      emptyDisplay="Niên khóa"
+                      allowEmpty
+                      canEdit={editable}
+                      label="Nhãn ảnh thời trẻ"
+                      onSave={(val) => saveMemberPatch({ cohortLabel: val }, 'Đã cập nhật nhãn ảnh thời trẻ.')}
+                      className="text-xs font-medium text-zinc-300"
+                    />
                   </div>
                 </div>
 
@@ -415,7 +432,17 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     />
                   </div>
                   <div className="text-center text-xs font-semibold text-white truncate">
-                    {member.presentLabel || 'Hiện tại'}
+                    <InlineEditableText
+                      as="span"
+                      inline
+                      value={member.presentLabel || ''}
+                      emptyDisplay="Hiện tại"
+                      allowEmpty
+                      canEdit={editable}
+                      label="Nhãn ảnh hiện tại"
+                      onSave={(val) => saveMemberPatch({ presentLabel: val }, 'Đã cập nhật nhãn ảnh hiện tại.')}
+                      className="text-xs font-semibold text-white"
+                    />
                   </div>
                 </div>
               </div>
@@ -423,10 +450,16 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
               {member.favoriteQuote && (
                 <div className="mt-5 pt-4 border-t border-white/10 flex items-start gap-2.5">
                   <Quote className="w-4 h-4 shrink-0 text-[#F02028] mt-0.5" />
-                  <CollapsibleText
+                  <InlineEditableText
                     as="p"
-                    text={`“${member.favoriteQuote}”`}
+                    multiline
+                    collapsible
                     collapsedLines={2}
+                    allowEmpty
+                    value={member.favoriteQuote}
+                    canEdit={editable}
+                    label="Câu nói / Châm ngôn yêu thích"
+                    onSave={(val) => saveMemberPatch({ favoriteQuote: val }, 'Đã cập nhật câu nói yêu thích.')}
                     className="text-xs italic text-zinc-300 leading-relaxed"
                   />
                 </div>
@@ -437,20 +470,65 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-2xl border border-white/10 bg-[#242428] p-5 text-sm">
                 <div>
                   <div className="text-xs text-zinc-400">Chức vụ / Vai trò</div>
-                  <div className="mt-0.5 font-medium text-white">{member.role || 'Đoàn viên'}</div>
+                  <div className="mt-0.5">
+                    <InlineEditableText
+                      as="div"
+                      value={member.role || ''}
+                      emptyDisplay="Đoàn viên"
+                      allowEmpty
+                      canEdit={editable}
+                      label="Chức vụ / Vai trò"
+                      onSave={(val) => saveMemberPatch({ role: val }, 'Đã cập nhật chức vụ / vai trò.')}
+                      className="font-medium text-white"
+                    />
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-zinc-400">Nghề nghiệp & Lĩnh vực</div>
-                  <div className="mt-0.5 font-medium text-white">
-                    {member.occupation || 'Đang cập nhật'}
-                    {member.field ? ` · ${member.field}` : ''}
+                  <div className="mt-0.5 font-medium text-white flex flex-wrap items-center gap-1">
+                    <InlineEditableText
+                      as="span"
+                      inline
+                      value={member.occupation || ''}
+                      emptyDisplay="Đang cập nhật"
+                      allowEmpty
+                      canEdit={editable}
+                      label="Nghề nghiệp"
+                      onSave={(val) => saveMemberPatch({ occupation: val }, 'Đã cập nhật nghề nghiệp.')}
+                      className="font-medium text-white"
+                    />
+                    {member.field && (
+                      <>
+                        <span className="text-zinc-400">·</span>
+                        <InlineEditableText
+                          as="span"
+                          inline
+                          value={member.field}
+                          allowEmpty
+                          canEdit={editable}
+                          label="Lĩnh vực"
+                          onSave={(val) => saveMemberPatch({ field: val }, 'Đã cập nhật lĩnh vực công tác.')}
+                          className="font-medium text-white"
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-zinc-400">Ngày tham gia & Niên khóa</div>
                   <div className="mt-0.5 flex items-center gap-1.5 font-mono-num text-zinc-200">
                     <Calendar className="w-3.5 h-3.5 text-[#F02028]" />
-                    <span>{member.joinDate || 'Chưa cập nhật'}</span>
+                    <InlineEditableText
+                      as="span"
+                      inline
+                      value={member.joinDate || ''}
+                      emptyDisplay="Chưa cập nhật"
+                      allowEmpty
+                      canEdit={editable}
+                      label="Ngày tham gia"
+                      onSave={(val) => saveMemberPatch({ joinDate: val }, 'Đã cập nhật ngày tham gia.')}
+                      className="font-mono-num text-zinc-200"
+                    />
                   </div>
                   {memberCohort && (
                     <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-300">
@@ -527,10 +605,17 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
               <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-3">
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">Tiểu sử</h3>
-                  <CollapsibleText
+                  <InlineEditableText
                     as="p"
-                    text={member.biography || 'Chưa cập nhật tiểu sử.'}
+                    multiline
+                    collapsible
                     collapsedLines={3}
+                    allowEmpty
+                    value={member.biography || ''}
+                    emptyDisplay="Chưa cập nhật tiểu sử."
+                    canEdit={editable}
+                    label="Tiểu sử thành viên"
+                    onSave={(val) => saveMemberPatch({ biography: val }, 'Đã cập nhật tiểu sử thành viên.')}
                     className="text-sm text-zinc-200 leading-relaxed"
                   />
                 </div>
@@ -539,10 +624,16 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">
                       Giới thiệu bản thân
                     </h3>
-                    <CollapsibleText
+                    <InlineEditableText
                       as="p"
-                      text={member.selfIntro}
+                      multiline
+                      collapsible
                       collapsedLines={3}
+                      allowEmpty
+                      value={member.selfIntro}
+                      canEdit={editable}
+                      label="Giới thiệu bản thân"
+                      onSave={(val) => saveMemberPatch({ selfIntro: val }, 'Đã cập nhật phần giới thiệu bản thân.')}
                       className="text-sm text-zinc-300 leading-relaxed"
                     />
                   </div>
@@ -615,10 +706,28 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                 {member.achievements.map((ach, idx) => (
                   <li
                     key={idx}
-                    className="rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2.5 text-sm text-zinc-200"
+                    className="rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2.5 text-sm text-zinc-200 flex items-start gap-2"
                   >
-                    <span className="font-mono-num text-xs text-[#F02028] mr-2">0{idx + 1}.</span>
-                    {ach}
+                    <span className="font-mono-num text-xs text-[#F02028] shrink-0 mt-0.5">0{idx + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <InlineEditableText
+                        as="p"
+                        multiline
+                        collapsible={false}
+                        value={ach}
+                        canEdit={editable}
+                        label={`Thành tích nổi bật #${idx + 1}`}
+                        onSave={(val) =>
+                          saveMemberPatch(
+                            {
+                              achievements: member.achievements.map((item, i) => (i === idx ? val : item)),
+                            },
+                            'Đã cập nhật thành tích nổi bật.'
+                          )
+                        }
+                        className="text-sm text-zinc-200"
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -688,7 +797,27 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                       />
                     </div>
                     <figcaption className="p-3 text-xs text-zinc-300 flex items-center justify-between gap-2">
-                      <span className="truncate">{photo.caption}</span>
+                      <div className="min-w-0 flex-1">
+                        <InlineEditableText
+                          as="span"
+                          value={photo.caption || ''}
+                          emptyDisplay="Chưa có chú thích"
+                          allowEmpty
+                          canEdit={editable}
+                          label="Chú thích ảnh hoạt động"
+                          onSave={(val) =>
+                            saveMemberPatch(
+                              {
+                                activityPhotos: member.activityPhotos.map((p) =>
+                                  p.id === photo.id ? { ...p, caption: val } : p
+                                ),
+                              },
+                              'Đã cập nhật chú thích ảnh hoạt động.'
+                            )
+                          }
+                          className="block truncate text-xs text-zinc-300"
+                        />
+                      </div>
                       <span className="font-mono-num text-[11px] text-zinc-500 shrink-0">{photo.takenAt}</span>
                     </figcaption>
                     {editable && (
@@ -700,9 +829,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                               ...member,
                               activityPhotos: member.activityPhotos.filter((p) => p.id !== photo.id),
                             },
-                            isAdmin
-                              ? 'Đã xóa ảnh khỏi hồ sơ.'
-                              : 'Đã gỡ ảnh khỏi hồ sơ. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+                            'Đã xóa ảnh khỏi hồ sơ.'
                           )
                         }
                         aria-label="Xóa ảnh"
@@ -784,8 +911,24 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                 {member.articles.map((art) => (
                   <article key={art.id} className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h4 className="font-semibold text-white">{art.title}</h4>
+                      <div className="min-w-0 flex-1">
+                        <InlineEditableText
+                          as="h4"
+                          value={art.title}
+                          canEdit={editable}
+                          label="Tiêu đề bài viết chia sẻ"
+                          onSave={(val) =>
+                            saveMemberPatch(
+                              {
+                                articles: member.articles.map((a) =>
+                                  a.id === art.id ? { ...a, title: val } : a
+                                ),
+                              },
+                              'Đã cập nhật tiêu đề bài viết.'
+                            )
+                          }
+                          className="font-semibold text-white"
+                        />
                         <div className="font-mono-num text-xs text-zinc-400 mt-0.5">{art.publishedAt}</div>
                       </div>
                       {editable && (
@@ -797,9 +940,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                                 ...member,
                                 articles: member.articles.filter((a) => a.id !== art.id),
                               },
-                              isAdmin
-                                ? 'Đã xóa bài viết chia sẻ.'
-                                : 'Đã gỡ bài viết. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+                              'Đã xóa bài viết chia sẻ.'
                             )
                           }
                           aria-label="Xóa bài viết"
@@ -809,10 +950,24 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                         </button>
                       )}
                     </div>
-                    <CollapsibleText
+                    <InlineEditableText
                       as="p"
-                      text={art.content}
+                      multiline
+                      collapsible
                       collapsedLines={3}
+                      value={art.content}
+                      canEdit={editable}
+                      label={`Bài viết: ${art.title}`}
+                      onSave={(val) =>
+                        saveMemberPatch(
+                          {
+                            articles: member.articles.map((a) =>
+                              a.id === art.id ? { ...a, content: val } : a
+                            ),
+                          },
+                          'Đã cập nhật nội dung bài viết.'
+                        )
+                      }
                       className="text-sm text-zinc-300 leading-relaxed"
                     />
                   </article>
@@ -938,11 +1093,44 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                       )}
                       <div className="p-3 flex-1 flex flex-col justify-between gap-2.5">
                         <div className="space-y-1">
-                          <h4 className="font-semibold text-xs sm:text-sm text-white line-clamp-1" title={vid.title}>
-                            {vid.title}
-                          </h4>
+                          <InlineEditableText
+                            as="h4"
+                            value={vid.title}
+                            canEdit={editable}
+                            label="Tiêu đề video YouTube"
+                            onSave={(val) =>
+                              saveMemberPatch(
+                                {
+                                  youtubeVideos: youtubeVideos.map((v) =>
+                                    v.id === vid.id ? { ...v, title: val } : v
+                                  ),
+                                },
+                                'Đã cập nhật tiêu đề video YouTube.'
+                              )
+                            }
+                            className="font-semibold text-xs sm:text-sm text-white line-clamp-1"
+                          />
                           {vid.notes && (
-                            <p className="text-[11px] text-zinc-300 leading-relaxed line-clamp-2">{vid.notes}</p>
+                            <InlineEditableText
+                              as="p"
+                              multiline
+                              collapsible={false}
+                              allowEmpty
+                              value={vid.notes}
+                              canEdit={editable}
+                              label="Ghi chú video YouTube"
+                              onSave={(val) =>
+                                saveMemberPatch(
+                                  {
+                                    youtubeVideos: youtubeVideos.map((v) =>
+                                      v.id === vid.id ? { ...v, notes: val } : v
+                                    ),
+                                  },
+                                  'Đã cập nhật ghi chú video YouTube.'
+                                )
+                              }
+                              className="text-[11px] text-zinc-300 leading-relaxed line-clamp-2"
+                            />
                           )}
                           <div className="font-mono-num text-[10px] text-zinc-500">{vid.addedAt}</div>
                         </div>
@@ -995,9 +1183,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                                     ...member,
                                     youtubeVideos: youtubeVideos.filter((v) => v.id !== vid.id),
                                   },
-                                  isAdmin
-                                    ? 'Đã xóa video YouTube khỏi hồ sơ.'
-                                    : 'Đã gỡ video YouTube. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+                                  'Đã xóa video YouTube khỏi hồ sơ.'
                                 );
                               }}
                               aria-label="Xóa video YouTube"
@@ -1115,8 +1301,24 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                         <div className="rounded-xl border border-white/10 bg-[#171719] p-2.5 text-[#F02028] shrink-0">
                           {isExternalLink ? <Link2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                         </div>
-                        <div className="min-w-0 space-y-0.5">
-                          <h4 className="font-semibold text-sm text-white truncate">{docItem.title}</h4>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <InlineEditableText
+                            as="h4"
+                            value={docItem.title}
+                            canEdit={editable}
+                            label="Tên tài liệu cá nhân"
+                            onSave={(val) =>
+                              saveMemberPatch(
+                                {
+                                  documents: memberDocuments.map((d) =>
+                                    d.id === docItem.id ? { ...d, title: val } : d
+                                  ),
+                                },
+                                'Đã cập nhật tên tài liệu.'
+                              )
+                            }
+                            className="font-semibold text-sm text-white truncate"
+                          />
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-zinc-400">
                             {docItem.fileName && docItem.fileName !== docItem.title && (
                               <span className="truncate max-w-[220px]">{docItem.fileName}</span>
@@ -1125,7 +1327,26 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                             {docItem.uploadedAt && <span className="font-mono-num">{docItem.uploadedAt}</span>}
                           </div>
                           {docItem.notes && (
-                            <p className="text-xs text-zinc-300 leading-relaxed pt-0.5">{docItem.notes}</p>
+                            <InlineEditableText
+                              as="p"
+                              multiline
+                              collapsible={false}
+                              allowEmpty
+                              value={docItem.notes}
+                              canEdit={editable}
+                              label="Ghi chú tài liệu"
+                              onSave={(val) =>
+                                saveMemberPatch(
+                                  {
+                                    documents: memberDocuments.map((d) =>
+                                      d.id === docItem.id ? { ...d, notes: val } : d
+                                    ),
+                                  },
+                                  'Đã cập nhật ghi chú tài liệu.'
+                                )
+                              }
+                              className="text-xs text-zinc-300 leading-relaxed pt-0.5"
+                            />
                           )}
                         </div>
                       </div>
@@ -1187,9 +1408,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                                   ...member,
                                   documents: memberDocuments.filter((d) => d.id !== docItem.id),
                                 },
-                                isAdmin
-                                  ? `Đã xóa tài liệu "${docItem.title}".`
-                                  : `Đã gỡ tài liệu "${docItem.title}". Nhấn "Cập nhật lên App" để lưu vào ứng dụng.`
+                                `Đã xóa tài liệu "${docItem.title}".`
                               )
                             }
                             aria-label={`Xóa tài liệu ${docItem.title}`}

@@ -1,8 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Plus, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Frame,
+  Palette,
+  Plus,
+  RotateCcw,
+  ShieldCheck,
+  SlidersHorizontal,
+  Trash2,
+  Type,
+  X,
+} from 'lucide-react';
 import { useMemoir } from '../../context/MemoirContext';
 import type { AdminRecordItem } from '../../services/firestoreMemoir';
 import { formatFirestoreUserMessage } from '../../services/firestoreError';
+import {
+  FONT_OPTIONS,
+  FRAME_OPTIONS,
+  THEME_OPTIONS,
+  resolveEffectiveFontPreset,
+} from '../../constants/themes';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,6 +30,9 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const {
     data,
+    displaySettings,
+    hasLocalDisplayOverride,
+    resetLocalDisplayPrefs,
     updateSettings,
     currentUser,
     isAdmin,
@@ -43,6 +64,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   }, [fetchAdminsList, isBootstrapAdmin, isOpen]);
 
   if (!isOpen) return null;
+
+  const effectiveFontId = resolveEffectiveFontPreset(displaySettings.themeMode, displaySettings.fontPreset);
+  const effectiveFontMeta = FONT_OPTIONS.find((f) => f.id === effectiveFontId);
 
   const handleCopyUid = async () => {
     if (!currentUser?.uid) return;
@@ -90,12 +114,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-modal-title"
+      onClick={onClose}
     >
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#171719] p-6 shadow-2xl">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#171719] p-5 sm:p-6 shadow-2xl"
+      >
         <button
           type="button"
           onClick={onClose}
@@ -105,48 +133,185 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#242428] border border-white/10 text-zinc-200">
+        <div className="flex items-center gap-3 mb-5 pr-8">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#242428] border border-white/10 text-zinc-200">
             <SlidersHorizontal className="w-5 h-5" />
           </div>
           <div>
             <h2 id="settings-modal-title" className="text-xl font-semibold text-white">
               Cài đặt không gian Hồi ký
             </h2>
-            <p className="text-xs text-zinc-400">Tùy chỉnh giao diện, đồng bộ Cloud Firestore và phân quyền Firebase.</p>
+            <p className="text-xs text-zinc-400">
+              Tùy chọn giao diện, phông chữ nghệ thuật THPT Hoàng Hoa Thám, đồng bộ & phân quyền.
+            </p>
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-white/10 bg-[#242428] p-4 space-y-4">
-            <div>
-              <div className="text-sm font-medium text-white mb-2">Chế độ nền giao diện</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => updateSettings({ themeMode: 'dark' })}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium border transition-colors cursor-pointer ${
-                    data.settings.themeMode === 'dark'
-                      ? 'border-[#F02028] bg-[#F02028]/15 text-white'
-                      : 'border-white/10 bg-[#171719] text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  Đen than chuẩn (#171719)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateSettings({ themeMode: 'neutral' })}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium border transition-colors cursor-pointer ${
-                    data.settings.themeMode === 'neutral'
-                      ? 'border-[#F02028] bg-[#F02028]/15 text-white'
-                      : 'border-white/10 bg-[#171719] text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  Xám trung tính sáng hơn
-                </button>
+          {/* 1. Theme Palette Picker */}
+          <div className="rounded-xl border border-white/10 bg-[#242428] p-4 space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-[#F02028]" />
+                <span className="text-sm font-semibold text-white">
+                  Chủ đề màu sắc & Không gian trình bày
+                </span>
               </div>
+              {!isAdmin && hasLocalDisplayOverride && (
+                <button
+                  type="button"
+                  onClick={resetLocalDisplayPrefs}
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-[#171719] px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:border-[#F02028]/60 hover:text-white transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Dùng mặc định Chi đoàn</span>
+                </button>
+              )}
             </div>
 
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              {isAdmin
+                ? 'Chủ đề Quản trị viên chọn sẽ áp dụng ngay và tự động lưu làm giao diện mặc định chung trên Cloud Firestore.'
+                : 'Thành viên và khách xem có thể tùy chọn giao diện yêu thích — lựa chọn được lưu riêng trên thiết bị của bạn.'}
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {THEME_OPTIONS.map((theme) => {
+                const selected = displaySettings.themeMode === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    onClick={() => updateSettings({ themeMode: theme.id })}
+                    className={`group text-left rounded-xl border p-3 transition-all cursor-pointer ${
+                      selected
+                        ? 'border-[#F02028] bg-[#F02028]/15 shadow-sm'
+                        : 'border-white/10 bg-[#171719] hover:border-white/25'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs sm:text-sm font-semibold text-white truncate">
+                            {theme.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-medium text-[#F02028] mt-0.5">{theme.tag}</div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                        {theme.swatches.map((hex, i) => (
+                          <span
+                            key={i}
+                            className="h-3.5 w-3.5 rounded-full border border-white/25 shadow-xs"
+                            style={{ backgroundColor: hex }}
+                            title={hex}
+                          />
+                        ))}
+                        {selected && (
+                          <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#F02028] text-white">
+                            <Check className="w-2.5 h-2.5" />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-snug">{theme.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. Typography Presets */}
+          <div className="rounded-xl border border-white/10 bg-[#242428] p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Type className="w-4 h-4 text-[#F02028]" />
+                <span className="text-sm font-semibold text-white">Bộ phông chữ (Typography)</span>
+              </div>
+              {displaySettings.fontPreset === 'auto' && effectiveFontMeta && (
+                <span className="text-[11px] text-zinc-400">
+                  Đang dùng: <span className="text-white font-medium">{effectiveFontMeta.name}</span>
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {FONT_OPTIONS.map((font) => {
+                const selected = displaySettings.fontPreset === font.id;
+                return (
+                  <button
+                    key={font.id}
+                    type="button"
+                    onClick={() => updateSettings({ fontPreset: font.id })}
+                    className={`text-left rounded-xl border p-3 transition-all cursor-pointer ${
+                      selected
+                        ? 'border-[#F02028] bg-[#F02028]/15'
+                        : 'border-white/10 bg-[#171719] hover:border-white/25'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-white">{font.name}</span>
+                      {selected && (
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#F02028] text-white">
+                          <Check className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className="mt-1.5 text-sm font-semibold text-zinc-200 truncate"
+                      style={{ fontFamily: font.previewDisplayFont }}
+                    >
+                      {font.sampleHeadline}
+                    </div>
+                    <div
+                      className="mt-0.5 text-[10px] text-zinc-400 leading-snug"
+                      style={{ fontFamily: font.previewBodyFont }}
+                    >
+                      {font.subtitle}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 3. Photo Frame & Presentation Style */}
+          <div className="rounded-xl border border-white/10 bg-[#242428] p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Frame className="w-4 h-4 text-[#F02028]" />
+              <span className="text-sm font-semibold text-white">Kiểu khung ảnh & trình bày</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {FRAME_OPTIONS.map((frame) => {
+                const selected = displaySettings.frameStyle === frame.id;
+                return (
+                  <button
+                    key={frame.id}
+                    type="button"
+                    onClick={() => updateSettings({ frameStyle: frame.id })}
+                    className={`text-left rounded-xl border p-3 transition-all cursor-pointer ${
+                      selected
+                        ? 'border-[#F02028] bg-[#F02028]/15'
+                        : 'border-white/10 bg-[#171719] hover:border-white/25'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-white">{frame.name}</span>
+                      {selected && (
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#F02028] text-white">
+                          <Check className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-zinc-400 leading-snug">{frame.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4. General App Toggles */}
+          <div className="rounded-xl border border-white/10 bg-[#242428] p-4 space-y-4">
             <label className="flex items-center justify-between gap-4 cursor-pointer">
               <div>
                 <div className="text-sm font-medium text-white">Tự động lưu khi chỉnh sửa</div>
@@ -262,7 +427,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
               {isBootstrapAdmin && admins.length > 0 && (
                 <div className="pt-2 border-t border-white/10 space-y-2">
-                  <div className="text-xs font-medium text-zinc-300">Danh sách Quản trị viên bổ sung ({admins.length})</div>
+                  <div className="text-xs font-medium text-zinc-300">
+                    Danh sách Quản trị viên bổ sung ({admins.length})
+                  </div>
                   {admins.map((adm) => (
                     <div
                       key={adm.uid}

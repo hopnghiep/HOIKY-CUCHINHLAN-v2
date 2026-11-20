@@ -3,9 +3,35 @@
 
 @layer base {
   :root {
-    --font-display: 'Playfair Display', Georgia, serif;
-    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-display: 'Inter', 'Montserrat', 'Roboto', system-ui, sans-serif;
+    --font-sans: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
+    --font-mono: 'Inter', 'JetBrains Mono', ui-monospace, monospace;
+    --font-quote: 'Inter', 'Roboto', system-ui, sans-serif;
+
+    --corp-navy: #002f69;
+    --corp-blue: #0087ff;
+    --corp-bg: #eeeef0;
+    --corp-card: #ffffff;
+    --corp-text-primary: #002f69;
+    --corp-text-secondary: #4a6b93;
+    --corp-border: #d5dde7;
+    --corp-dark: #242424;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    --app-outer-bg: #eeeef0;
+    --app-surface-1: #ffffff;
+    --app-surface-2: #f6f8fb;
+    --app-text-main: #242424;
+    --app-scroll-track: #e4e7ec;
+    --app-scroll-thumb: #b4c2d4;
+    --app-scroll-thumb-hover: #0087ff;
   }
 
   html {
@@ -13,8 +39,18 @@
     scroll-behavior: smooth;
   }
 
+  body {
+    background-color: var(--app-outer-bg);
+    color: var(--app-text-main);
+    transition: background-color 0.22s ease, color 0.22s ease;
+  }
+
   h1, h2, .font-display {
     font-family: var(--font-display);
+  }
+
+  .font-editorial-serif {
+    font-family: var(--font-quote);
   }
 
   .font-mono-num {
@@ -31,23 +67,1650 @@
   text-wrap: balance;
 }
 
-/* Subtle custom scrollbars for dark archival interface */
+.theme-outer-shell {
+  background-color: var(--app-outer-bg);
+  color: var(--app-text-main);
+}
+
+/* Geometric Swiss motifs only appear in Editorial Studio (subtle) */
+.editorial-motif {
+  display: none;
+}
+
+html[data-theme="editorial_studio"] .editorial-motif {
+  display: block;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #141416;
+  background: var(--app-scroll-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2f2f35;
+  background: var(--app-scroll-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #45454e;
+  background: var(--app-scroll-thumb-hover);
+}
+
+/* ============================================================================
+   TYPOGRAPHY PRESETS (Corporate Inter + Vietnamese-first & Editorial pairings)
+   ============================================================================ */
+
+html[data-font="corporate_inter"] {
+  --font-display: 'Inter', 'Montserrat', 'Roboto', system-ui, sans-serif;
+  --font-sans: 'Inter', 'Roboto', 'Montserrat', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Inter', 'JetBrains Mono', ui-monospace, monospace;
+  --font-quote: 'Inter', 'Roboto', system-ui, sans-serif;
+}
+
+html[data-font="corporate_inter"],
+html[data-font="corporate_inter"] body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+html[data-font="corporate_inter"] h1,
+html[data-font="corporate_inter"] h2,
+html[data-font="corporate_inter"] .font-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+
+html[data-font="corporate_inter"] .editorial-hero-title {
+  font-size: clamp(1.75rem, 4vw, 3.125rem);
+  line-height: 1.12;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+html[data-font="corporate_inter"] .editorial-section-title {
+  font-size: clamp(1.5rem, 2.4vw, 2.125rem);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+html[data-font="corporate_inter"] h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+/* Corporate Inter forbids decorative serifs — keep editorial subtitles crisp sans-serif */
+html[data-font="corporate_inter"] .font-editorial-serif,
+html[data-font="corporate_inter"] blockquote {
+  font-family: var(--font-sans);
+  font-style: normal;
+}
+
+html[data-font="corporate_inter"] .font-mono-num {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-font="editorial_swiss"] {
+  --font-display: 'Montserrat', 'Helvetica Neue', system-ui, sans-serif;
+  --font-sans: 'Montserrat', 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-quote: 'Cormorant Garamond', Georgia, serif;
+}
+
+html[data-font="editorial_swiss"],
+html[data-font="editorial_swiss"] body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
+
+html[data-font="editorial_swiss"] h1,
+html[data-font="editorial_swiss"] h2,
+html[data-font="editorial_swiss"] .font-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+html[data-font="editorial_swiss"] .editorial-hero-title {
+  font-size: clamp(2.25rem, 4.5vw, 4rem);
+  line-height: 1.08;
+  font-weight: 500;
+  letter-spacing: 0.045em;
+}
+
+html[data-font="editorial_swiss"] .editorial-section-title {
+  font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+  line-height: 1.18;
+  font-weight: 500;
+  letter-spacing: 0.055em;
+}
+
+html[data-font="editorial_swiss"] h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+html[data-font="editorial_swiss"] .font-editorial-serif,
+html[data-font="editorial_swiss"] blockquote,
+html[data-font="editorial_swiss"] .italic {
+  font-family: var(--font-quote);
+  font-style: italic;
+}
+
+html[data-font="default"] {
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-quote: 'Playfair Display', Georgia, serif;
+}
+
+html[data-font="heritage_50"] {
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-quote: 'Charm', 'Playfair Display', Georgia, serif;
+}
+
+html[data-font="student_fresh"] {
+  --font-display: 'Lora', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-quote: 'Patrick Hand', 'Lora', Georgia, serif;
+}
+
+html[data-font="yearbook_art"] {
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-quote: 'Dancing Script', 'Cormorant Garamond', Georgia, serif;
+}
+
+html[data-font="youth_power"] {
+  --font-display: 'Montserrat', 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-quote: 'Lora', Georgia, serif;
+}
+
+/* Expressive typography tweaks per preset */
+html[data-font="yearbook_art"] h1,
+html[data-font="yearbook_art"] h2,
+html[data-font="yearbook_art"] .font-display {
+  letter-spacing: 0.01em;
+}
+
+html[data-font="youth_power"] h1,
+html[data-font="youth_power"] h2,
+html[data-font="youth_power"] .font-display {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+html[data-font="heritage_50"] blockquote,
+html[data-font="heritage_50"] .italic,
+html[data-font="yearbook_art"] blockquote,
+html[data-font="student_fresh"] blockquote {
+  font-family: var(--font-quote);
+}
+
+/* ============================================================================
+   THEME DEFAULT: MODERN CORPORATE BLUE · BUSINESS EDITORIAL · INFOGRAPHIC
+   Exact Palette (strict — NO earth-gold, NO gradients, NO neon):
+   - Primary Navy:     #002F69 (Brand identity, header, footer, headings, dark band)
+   - Electric Blue:    #0087FF (Buttons, active states, highlights, icons, primary chart)
+   - Main Background:  #EEEEF0 (Clean light gray canvas)
+   - Card Background:  #FFFFFF (Crisp structured white cards)
+   - Text Primary:     #002F69
+   - Text Secondary:   #4A6B93
+   - Border:           #D5DDE7
+   - Dark Text:        #242424
+   ============================================================================ */
+
+html[data-theme="corporate_blue"] {
+  --app-outer-bg: #eeeef0;
+  --app-surface-1: #ffffff;
+  --app-surface-2: #f6f8fb;
+  --app-text-main: #242424;
+  --app-scroll-track: #e4e7ec;
+  --app-scroll-thumb: #b4c2d4;
+  --app-scroll-thumb-hover: #0087ff;
+}
+
+html[data-theme="corporate_blue"],
+html[data-theme="corporate_blue"] body,
+html[data-theme="corporate_blue"] .theme-outer-shell {
+  background-color: #eeeef0;
+  background-image: none;
+  color: #242424;
+}
+
+/* Crisp Corporate Geometry (modest structured radii, zero bubbly/heavy shadow) */
+html[data-theme="corporate_blue"] .rounded-3xl {
+  border-radius: 12px;
+}
+
+html[data-theme="corporate_blue"] .rounded-2xl {
+  border-radius: 10px;
+}
+
+html[data-theme="corporate_blue"] .rounded-xl {
+  border-radius: 8px;
+}
+
+html[data-theme="corporate_blue"] .rounded-lg {
+  border-radius: 6px;
+}
+
+/* Alternating Editorial Band Containers */
+html[data-theme="corporate_blue"] .editorial-open-section,
+html[data-theme="corporate_blue"] .editorial-cream-sheet,
+html[data-theme="corporate_blue"] .corp-white-band {
+  background-color: #ffffff;
+  border: 1px solid #d5dde7;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 47, 105, 0.04);
+}
+
+html[data-theme="corporate_blue"] .corp-hero-sheet {
+  background-color: #ffffff;
+  border: 1px solid #d5dde7;
+  border-top: 4px solid #002f69;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 47, 105, 0.05);
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band {
+  background-color: #002f69 !important;
+  border: 1px solid #002452 !important;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+html[data-theme="corporate_blue"] .corp-gray-band {
+  background-color: #eeeef0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Surface Color Mapping */
+html[data-theme="corporate_blue"] .bg-\[\#111113\] {
+  background-color: #eeeef0;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#171719\] {
+  background-color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#171719\]\/80 {
+  background-color: rgba(255, 255, 255, 0.94);
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#171719\]\/95 {
+  background-color: rgba(255, 255, 255, 0.97);
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#171719\]\/98 {
+  background-color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#242428\],
+html[data-theme="corporate_blue"] .bg-\[\#202024\],
+html[data-theme="corporate_blue"] .bg-\[\#2a2a30\] {
+  background-color: #f6f8fb;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#242428\]\/50,
+html[data-theme="corporate_blue"] .bg-\[\#242428\]\/60 {
+  background-color: #f7f9fc;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#242428\]\/70 {
+  background-color: #f2f5fa;
+}
+
+html[data-theme="corporate_blue"] .bg-white\/\[0\.04\],
+html[data-theme="corporate_blue"] .bg-white\/\[0\.03\],
+html[data-theme="corporate_blue"] .bg-white\/5 {
+  background-color: rgba(0, 47, 105, 0.04);
+}
+
+html[data-theme="corporate_blue"] .hover\:bg-white\/10:hover,
+html[data-theme="corporate_blue"] .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 135, 255, 0.08);
+}
+
+/* Crisp Corporate Borders (#D5DDE7) */
+html[data-theme="corporate_blue"] .border-white\/10,
+html[data-theme="corporate_blue"] .border-white\/15 {
+  border-color: #d5dde7;
+}
+
+html[data-theme="corporate_blue"] .border-white\/20,
+html[data-theme="corporate_blue"] .border-white\/25 {
+  border-color: #bcc8d8;
+}
+
+html[data-theme="corporate_blue"] .border-white\/5 {
+  border-color: #e4eaf1;
+}
+
+html[data-theme="corporate_blue"] .ring-white\/10 {
+  --tw-ring-color: #d5dde7;
+}
+
+/* Body & Secondary Text Colors (placed BEFORE heading & dark-band overrides!) */
+html[data-theme="corporate_blue"] .text-white,
+html[data-theme="corporate_blue"] .text-\[\#F4F4F5\] {
+  color: #002f69;
+}
+
+html[data-theme="corporate_blue"] .text-zinc-100,
+html[data-theme="corporate_blue"] .text-zinc-200 {
+  color: #242424;
+}
+
+html[data-theme="corporate_blue"] .text-zinc-300 {
+  color: #364558;
+}
+
+html[data-theme="corporate_blue"] .text-zinc-400 {
+  color: #4a6b93;
+}
+
+html[data-theme="corporate_blue"] .text-zinc-500 {
+  color: #5b789c;
+}
+
+html[data-theme="corporate_blue"] .hover\:text-white:hover {
+  color: #0087ff;
+}
+
+/* Primary Navy (#002F69) for Headings & Display Titles */
+html[data-theme="corporate_blue"] h1,
+html[data-theme="corporate_blue"] h2,
+html[data-theme="corporate_blue"] h3,
+html[data-theme="corporate_blue"] h4,
+html[data-theme="corporate_blue"] .font-display,
+html[data-theme="corporate_blue"] .editorial-hero-title,
+html[data-theme="corporate_blue"] .editorial-section-title {
+  color: #002f69;
+}
+
+/* Electric Blue (#0087FF) Accent & Interactive Mapping */
+html[data-theme="corporate_blue"] .text-\[\#F02028\],
+html[data-theme="corporate_blue"] .text-\[\#ff8a8f\],
+html[data-theme="corporate_blue"] .text-\[\#ff9ea2\] {
+  color: #0087ff;
+}
+
+html[data-theme="corporate_blue"] .hover\:text-\[\#F02028\]:hover {
+  color: #006fd6;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#F02028\] {
+  background-color: #0087ff;
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#F02028\]:hover,
+html[data-theme="corporate_blue"] .hover\:bg-\[\#d91b23\]:hover,
+html[data-theme="corporate_blue"] .bg-\[\#d91b23\] {
+  background-color: #006fd6;
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#F02028\]\/15,
+html[data-theme="corporate_blue"] .bg-\[\#F02028\]\/20,
+html[data-theme="corporate_blue"] .bg-\[\#F02028\]\/25 {
+  background-color: rgba(0, 135, 255, 0.11);
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#F02028\]\/10 {
+  background-color: rgba(0, 135, 255, 0.08);
+}
+
+html[data-theme="corporate_blue"] .border-\[\#F02028\],
+html[data-theme="corporate_blue"] .border-\[\#F02028\]\/60,
+html[data-theme="corporate_blue"] .border-\[\#F02028\]\/50,
+html[data-theme="corporate_blue"] .border-\[\#F02028\]\/40,
+html[data-theme="corporate_blue"] .border-\[\#F02028\]\/30,
+html[data-theme="corporate_blue"] .border-\[\#F02028\]\/25,
+html[data-theme="corporate_blue"] .hover\:border-\[\#F02028\]:hover,
+html[data-theme="corporate_blue"] .hover\:border-\[\#F02028\]\/60:hover,
+html[data-theme="corporate_blue"] .hover\:border-\[\#F02028\]\/50:hover,
+html[data-theme="corporate_blue"] .hover\:border-\[\#F02028\]\/40:hover {
+  border-color: #0087ff;
+}
+
+html[data-theme="corporate_blue"] .accent-\[\#F02028\] {
+  accent-color: #0087ff;
+}
+
+html[data-theme="corporate_blue"] .text-sky-300,
+html[data-theme="corporate_blue"] .text-sky-400,
+html[data-theme="corporate_blue"] .text-blue-400 {
+  color: #0087ff;
+}
+
+html[data-theme="corporate_blue"] .text-emerald-200,
+html[data-theme="corporate_blue"] .text-emerald-300,
+html[data-theme="corporate_blue"] .text-emerald-400 {
+  color: #0d6e4f;
+}
+
+html[data-theme="corporate_blue"] .text-amber-300,
+html[data-theme="corporate_blue"] .text-amber-200 {
+  color: #4a6b93;
+}
+
+html[data-theme="corporate_blue"] .text-red-200,
+html[data-theme="corporate_blue"] .text-red-300 {
+  color: #b42318;
+}
+
+/* Form Controls: White background, #D5DDE7 border, #0087FF focus ring */
+html[data-theme="corporate_blue"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="corporate_blue"] textarea,
+html[data-theme="corporate_blue"] select {
+  background-color: #ffffff;
+  border-color: #d5dde7;
+  color: #242424;
+  border-radius: 6px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+html[data-theme="corporate_blue"] input::placeholder,
+html[data-theme="corporate_blue"] textarea::placeholder {
+  color: #4a6b93;
+  opacity: 0.78;
+}
+
+html[data-theme="corporate_blue"] input:focus,
+html[data-theme="corporate_blue"] textarea:focus,
+html[data-theme="corporate_blue"] select:focus {
+  border-color: #0087ff;
+  box-shadow: 0 0 0 3px rgba(0, 135, 255, 0.16);
+  outline: none;
+}
+
+/* ============================================================================
+   CORPORATE BLUE: HEADER & FOOTER (DEEP NAVY #002F69 + WHITE + ELECTRIC BLUE)
+   Placed AFTER light-text rules so white text always wins on Navy surfaces!
+   ============================================================================ */
+
+html[data-theme="corporate_blue"] header {
+  background-color: #002f69 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 1px 4px rgba(0, 24, 58, 0.14);
+}
+
+html[data-theme="corporate_blue"] header .border-white\/5,
+html[data-theme="corporate_blue"] header .border-white\/10,
+html[data-theme="corporate_blue"] header .border-white\/15 {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="corporate_blue"] header nav button.text-white {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+html[data-theme="corporate_blue"] header nav button.text-zinc-400 {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+html[data-theme="corporate_blue"] header nav button.text-zinc-400:hover {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] header nav button span.text-zinc-400,
+html[data-theme="corporate_blue"] header nav button svg.text-zinc-400 {
+  color: #9dc5f2;
+}
+
+html[data-theme="corporate_blue"] header .text-zinc-200,
+html[data-theme="corporate_blue"] header .text-zinc-300,
+html[data-theme="corporate_blue"] header .text-white {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] header .text-zinc-400 {
+  color: #bfd4ee;
+}
+
+html[data-theme="corporate_blue"] header .bg-\[\#242428\] {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html[data-theme="corporate_blue"] header .bg-\[\#242428\]:hover,
+html[data-theme="corporate_blue"] header .hover\:bg-white\/10:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+html[data-theme="corporate_blue"] header .bg-\[\#F02028\]\/15 {
+  background-color: rgba(0, 135, 255, 0.24);
+  border-color: rgba(0, 135, 255, 0.6);
+}
+
+/* Header Quick-Jump Submenu Dropdown: crisp white card */
+html[data-theme="corporate_blue"] header [role="menu"] {
+  background-color: #ffffff !important;
+  border-color: #d5dde7 !important;
+  box-shadow: 0 12px 28px rgba(0, 47, 105, 0.18);
+}
+
+html[data-theme="corporate_blue"] header [role="menu"] .border-white\/10 {
+  border-color: #e4eaf1;
+}
+
+html[data-theme="corporate_blue"] header [role="menu"] .text-zinc-400 {
+  color: #4a6b93;
+}
+
+html[data-theme="corporate_blue"] header [role="menu"] .text-zinc-200 {
+  color: #002f69;
+}
+
+html[data-theme="corporate_blue"] header [role="menu"] button:hover {
+  background-color: #f0f7ff;
+  color: #0087ff;
+}
+
+html[data-theme="corporate_blue"] header [role="menu"] .text-\[\#F02028\] {
+  color: #0087ff;
+}
+
+/* Mobile drawer inside Navy header */
+html[data-theme="corporate_blue"] header .lg\:hidden.bg-\[\#171719\] {
+  background-color: #002452 !important;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Deep Navy Footer */
+html[data-theme="corporate_blue"] footer {
+  background-color: #002f69 !important;
+  border-top: 1px solid #002452;
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] footer .font-display,
+html[data-theme="corporate_blue"] footer .text-white {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] footer .text-zinc-400 {
+  color: #bfd4ee;
+}
+
+html[data-theme="corporate_blue"] footer a {
+  color: #dbe9f8;
+}
+
+html[data-theme="corporate_blue"] footer a:hover {
+  color: #66b8ff;
+}
+
+/* ============================================================================
+   CORPORATE BLUE: ALTERNATING DEEP NAVY BAND CONTRAST PROTECTION
+   White text directly on #002F69, while inner white subcards stay crisp dark-on-white
+   ============================================================================ */
+
+html[data-theme="corporate_blue"] .corp-navy-band {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band > div .border-white\/10,
+html[data-theme="corporate_blue"] .corp-navy-band .border-white\/10 {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band h2,
+html[data-theme="corporate_blue"] .corp-navy-band h3,
+html[data-theme="corporate_blue"] .corp-navy-band .font-display,
+html[data-theme="corporate_blue"] .corp-navy-band .editorial-section-title,
+html[data-theme="corporate_blue"] .corp-navy-band .text-white {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band .text-zinc-200,
+html[data-theme="corporate_blue"] .corp-navy-band .text-zinc-300 {
+  color: #dbe7f5;
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band .text-zinc-400 {
+  color: #8cc2ff;
+}
+
+/* Crisp White Pillar Cards seated inside a Deep Navy Band */
+html[data-theme="corporate_blue"] .corp-navy-band .editorial-subcard {
+  background-color: #ffffff;
+  border: 1px solid #d5dde7;
+  border-top: 3px solid #0087ff;
+  border-radius: 10px;
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band .editorial-subcard .text-\[\#F02028\] {
+  color: #0087ff;
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band .editorial-subcard .text-zinc-300,
+html[data-theme="corporate_blue"] .corp-navy-band .editorial-subcard p {
+  color: #242424;
+}
+
+html[data-theme="corporate_blue"] .corp-navy-band .editorial-subcard h3 {
+  color: #002f69;
+}
+
+/* Contrast Protection for Primary Electric Blue Buttons, Navy Badges, Dark Overlays & Lightboxes */
+html[data-theme="corporate_blue"] .bg-\[\#F02028\],
+html[data-theme="corporate_blue"] .bg-\[\#F02028\] *,
+html[data-theme="corporate_blue"] .bg-\[\#0087FF\],
+html[data-theme="corporate_blue"] .bg-\[\#0087FF\] *,
+html[data-theme="corporate_blue"] .bg-\[\#002F69\],
+html[data-theme="corporate_blue"] .bg-\[\#002F69\] * {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] [class*="bg-black/"],
+html[data-theme="corporate_blue"] [class*="bg-black/"] .text-white,
+html[data-theme="corporate_blue"] [class*="bg-black/"] .text-zinc-200,
+html[data-theme="corporate_blue"] [class*="bg-black/"] .text-zinc-300,
+html[data-theme="corporate_blue"] [class*="from-black/"] .text-white,
+html[data-theme="corporate_blue"] [class*="from-black/"] .text-zinc-200 {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] {
+  color: #f4f4f5;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] .bg-\[\#171719\] {
+  background-color: #101b2d;
+  box-shadow: none;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] .bg-\[\#242428\] {
+  background-color: #172740;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] .text-white,
+html[data-theme="corporate_blue"] [data-force-dark="true"] h1,
+html[data-theme="corporate_blue"] [data-force-dark="true"] h2 {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] .text-zinc-200 {
+  color: #e4eaf3;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] .text-zinc-300 {
+  color: #c8d6e8;
+}
+
+html[data-theme="corporate_blue"] [data-force-dark="true"] .text-zinc-400 {
+  color: #93abc9;
+}
+
+/* Toasts in Corporate Blue */
+html[data-theme="corporate_blue"] .bg-\[\#141d19\]\/95 {
+  background-color: #002f69;
+  border-color: #0087ff;
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#141d19\]\/95 * {
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#1f1214\]\/95 {
+  background-color: #991b1b;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+html[data-theme="corporate_blue"] .bg-\[\#1f1214\]\/95 * {
+  color: #ffffff;
+}
+
+/* Corporate Blue Photo Frame */
+html[data-theme="corporate_blue"] .editorial-photo-frame {
+  overflow: hidden;
+  border: 1px solid #d5dde7;
+  background-color: #002f69;
+}
+
+/* ============================================================================
+   THEME 0: EDITORIAL PORTFOLIO · SWISS GRAPHIC DESIGN · MODERN RETRO
+   Exact Palette:
+   - Primary Background: #CFA159 (Warm Ochre — flat, zero gradients)
+   - Primary Green:      #1D592C (Headings, primary buttons, editorial accents)
+   - Secondary Cream:    #F5EBDD (Secondary sheets, cards, inputs, button text)
+   - Dark Text:          #28231D (Primary readable body copy)
+   - Warm Brown:         #805333 (Muted metadata, captions, borders)
+   - Olive Accent:       #64733A (Geometric accents, secondary highlights)
+   ============================================================================ */
+
+html[data-theme="editorial_studio"] {
+  --app-outer-bg: #cfa159;
+  --app-surface-1: #f5ebdd;
+  --app-surface-2: #efe2ce;
+  --app-text-main: #28231d;
+  --app-scroll-track: #c3944c;
+  --app-scroll-thumb: #805333;
+  --app-scroll-thumb-hover: #1d592c;
+}
+
+/* Strictly NO arbitrary gradients on background */
+html[data-theme="editorial_studio"],
+html[data-theme="editorial_studio"] body,
+html[data-theme="editorial_studio"] .theme-outer-shell {
+  background-color: #cfa159;
+  background-image: none;
+  color: #28231d;
+}
+
+/* Minimalist Swiss Masthead Header on Warm Ochre Canvas */
+html[data-theme="editorial_studio"] header {
+  background-color: rgba(207, 161, 89, 0.96) !important;
+  border-top: 2px solid #1d592c;
+  border-bottom: 1px solid rgba(40, 35, 29, 0.24);
+  box-shadow: none;
+}
+
+html[data-theme="editorial_studio"] header nav button.text-white {
+  color: #1d592c;
+  font-weight: 600;
+}
+
+html[data-theme="editorial_studio"] header nav button.text-zinc-400 {
+  color: #28231d;
+  opacity: 0.8;
+}
+
+html[data-theme="editorial_studio"] header nav button.text-zinc-400:hover {
+  color: #1d592c;
+  opacity: 1;
+}
+
+html[data-theme="editorial_studio"] footer {
+  background-color: #f5ebdd;
+  border-top: 1px solid rgba(40, 35, 29, 0.24);
+}
+
+/* Open Editorial Sections directly on Ochre Canvas (#CFA159) */
+html[data-theme="editorial_studio"] .editorial-open-section {
+  background-color: transparent !important;
+  border-color: rgba(40, 35, 29, 0.28) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+@media (min-width: 1024px) {
+  html[data-theme="editorial_studio"] .editorial-open-section {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Secondary Cream Architectural Sheets (#F5EBDD) */
+html[data-theme="editorial_studio"] .editorial-cream-sheet {
+  background-color: #f5ebdd !important;
+  border: 1px solid rgba(128, 83, 51, 0.28) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+/* Editorial hairline subcards inside open Ochre sections */
+html[data-theme="editorial_studio"] .editorial-open-section .editorial-subcard {
+  background-color: #f5ebdd;
+  border: 1px solid rgba(128, 83, 51, 0.3);
+  border-radius: 3px;
+}
+
+/* Editorial Swiss Geometry: crisp architectural corners instead of bubbly cards */
+html[data-theme="editorial_studio"] .rounded-3xl {
+  border-radius: 4px;
+}
+
+html[data-theme="editorial_studio"] .rounded-2xl {
+  border-radius: 4px;
+}
+
+html[data-theme="editorial_studio"] .rounded-xl {
+  border-radius: 3px;
+}
+
+html[data-theme="editorial_studio"] .rounded-lg {
+  border-radius: 2px;
+}
+
+/* Surface Color Mapping */
+html[data-theme="editorial_studio"] .bg-\[\#111113\] {
+  background-color: #cfa159;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#171719\] {
+  background-color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#171719\]\/80 {
+  background-color: rgba(245, 235, 221, 0.92);
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#171719\]\/95 {
+  background-color: rgba(245, 235, 221, 0.96);
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#171719\]\/98 {
+  background-color: rgba(245, 235, 221, 0.98);
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#242428\],
+html[data-theme="editorial_studio"] .bg-\[\#202024\],
+html[data-theme="editorial_studio"] .bg-\[\#2a2a30\] {
+  background-color: #efe2ce;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#242428\]\/50,
+html[data-theme="editorial_studio"] .bg-\[\#242428\]\/60 {
+  background-color: rgba(245, 235, 221, 0.72);
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#242428\]\/70 {
+  background-color: rgba(245, 235, 221, 0.88);
+}
+
+html[data-theme="editorial_studio"] .bg-white\/\[0\.04\],
+html[data-theme="editorial_studio"] .bg-white\/\[0\.03\],
+html[data-theme="editorial_studio"] .bg-white\/5 {
+  background-color: rgba(40, 35, 29, 0.055);
+}
+
+html[data-theme="editorial_studio"] .hover\:bg-white\/10:hover,
+html[data-theme="editorial_studio"] .hover\:bg-white\/5:hover {
+  background-color: rgba(29, 89, 44, 0.12);
+}
+
+/* Crisp Swiss Hairline Borders */
+html[data-theme="editorial_studio"] .border-white\/10 {
+  border-color: rgba(128, 83, 51, 0.3);
+}
+
+html[data-theme="editorial_studio"] .border-white\/15,
+html[data-theme="editorial_studio"] .border-white\/20,
+html[data-theme="editorial_studio"] .border-white\/25 {
+  border-color: rgba(128, 83, 51, 0.45);
+}
+
+html[data-theme="editorial_studio"] .border-white\/5 {
+  border-color: rgba(40, 35, 29, 0.16);
+}
+
+html[data-theme="editorial_studio"] .ring-white\/10 {
+  --tw-ring-color: rgba(128, 83, 51, 0.3);
+}
+
+/* Body & Metadata Text Colors (placed BEFORE heading overrides so #1D592C ALWAYS wins on headings!) */
+html[data-theme="editorial_studio"] .text-white,
+html[data-theme="editorial_studio"] .text-zinc-100,
+html[data-theme="editorial_studio"] .text-zinc-200,
+html[data-theme="editorial_studio"] .text-\[\#F4F4F5\] {
+  color: #28231d;
+}
+
+html[data-theme="editorial_studio"] .text-zinc-300 {
+  color: #362c22;
+}
+
+html[data-theme="editorial_studio"] .text-zinc-400 {
+  color: #6b452a;
+}
+
+html[data-theme="editorial_studio"] .text-zinc-500 {
+  color: #805333;
+}
+
+html[data-theme="editorial_studio"] .hover\:text-white:hover {
+  color: #1d592c;
+}
+
+/* Primary Green (#1D592C) for Large Headings & Editorial Display Titles */
+html[data-theme="editorial_studio"] h1,
+html[data-theme="editorial_studio"] h2,
+html[data-theme="editorial_studio"] h1.text-white,
+html[data-theme="editorial_studio"] h2.text-white,
+html[data-theme="editorial_studio"] .font-display,
+html[data-theme="editorial_studio"] .font-display.text-white,
+html[data-theme="editorial_studio"] .editorial-hero-title,
+html[data-theme="editorial_studio"] .editorial-section-title {
+  color: #1d592c;
+}
+
+/* Accent Mapping: Deep Forest Green (#1D592C) & Olive (#64733A) */
+html[data-theme="editorial_studio"] .text-\[\#F02028\],
+html[data-theme="editorial_studio"] .text-\[\#ff8a8f\],
+html[data-theme="editorial_studio"] .text-\[\#ff9ea2\] {
+  color: #1d592c;
+}
+
+html[data-theme="editorial_studio"] .hover\:text-\[\#F02028\]:hover {
+  color: #154421;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#F02028\] {
+  background-color: #1d592c;
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#F02028\]:hover,
+html[data-theme="editorial_studio"] .hover\:bg-\[\#d91b23\]:hover,
+html[data-theme="editorial_studio"] .bg-\[\#d91b23\] {
+  background-color: #154421;
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#F02028\]\/15,
+html[data-theme="editorial_studio"] .bg-\[\#F02028\]\/20,
+html[data-theme="editorial_studio"] .bg-\[\#F02028\]\/25 {
+  background-color: rgba(29, 89, 44, 0.14);
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#F02028\]\/10 {
+  background-color: rgba(100, 115, 58, 0.18);
+}
+
+html[data-theme="editorial_studio"] .border-\[\#F02028\],
+html[data-theme="editorial_studio"] .border-\[\#F02028\]\/60,
+html[data-theme="editorial_studio"] .border-\[\#F02028\]\/50,
+html[data-theme="editorial_studio"] .border-\[\#F02028\]\/40,
+html[data-theme="editorial_studio"] .border-\[\#F02028\]\/30,
+html[data-theme="editorial_studio"] .border-\[\#F02028\]\/25,
+html[data-theme="editorial_studio"] .hover\:border-\[\#F02028\]:hover,
+html[data-theme="editorial_studio"] .hover\:border-\[\#F02028\]\/60:hover,
+html[data-theme="editorial_studio"] .hover\:border-\[\#F02028\]\/50:hover,
+html[data-theme="editorial_studio"] .hover\:border-\[\#F02028\]\/40:hover {
+  border-color: #1d592c;
+}
+
+html[data-theme="editorial_studio"] .accent-\[\#F02028\] {
+  accent-color: #1d592c;
+}
+
+/* Keep Olive (#64733A) / Deep Green (#1D592C) / Warm Brown (#805333) — eliminate cool blue/cold tones */
+html[data-theme="editorial_studio"] .text-sky-300,
+html[data-theme="editorial_studio"] .text-sky-400,
+html[data-theme="editorial_studio"] .text-blue-400,
+html[data-theme="editorial_studio"] .text-emerald-200,
+html[data-theme="editorial_studio"] .text-emerald-300,
+html[data-theme="editorial_studio"] .text-emerald-400 {
+  color: #1d592c;
+}
+
+html[data-theme="editorial_studio"] .text-amber-300,
+html[data-theme="editorial_studio"] .text-amber-200 {
+  color: #64733a;
+}
+
+html[data-theme="editorial_studio"] .text-red-200,
+html[data-theme="editorial_studio"] .text-red-300 {
+  color: #7a2a1d;
+}
+
+/* Form Inputs: Secondary Cream (#F5EBDD) + thin Warm Brown border + Deep Green focus */
+html[data-theme="editorial_studio"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="editorial_studio"] textarea,
+html[data-theme="editorial_studio"] select {
+  background-color: #f5ebdd;
+  border-color: rgba(128, 83, 51, 0.45);
+  color: #28231d;
+  border-radius: 2px;
+}
+
+html[data-theme="editorial_studio"] input::placeholder,
+html[data-theme="editorial_studio"] textarea::placeholder {
+  color: #805333;
+  opacity: 0.78;
+}
+
+html[data-theme="editorial_studio"] input:focus,
+html[data-theme="editorial_studio"] textarea:focus,
+html[data-theme="editorial_studio"] select:focus {
+  border-color: #1d592c;
+  outline: none;
+}
+
+/* Contrast Protection for Primary Deep Green Buttons, Dark Overlays & Fullscreen Photo Lightboxes */
+html[data-theme="editorial_studio"] .bg-\[\#F02028\],
+html[data-theme="editorial_studio"] .bg-\[\#F02028\] *,
+html[data-theme="editorial_studio"] .bg-\[\#1D592C\],
+html[data-theme="editorial_studio"] .bg-\[\#1D592C\] * {
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] [class*="bg-black/"],
+html[data-theme="editorial_studio"] [class*="bg-black/"] .text-white,
+html[data-theme="editorial_studio"] [class*="bg-black/"] .text-zinc-200,
+html[data-theme="editorial_studio"] [class*="bg-black/"] .text-zinc-300,
+html[data-theme="editorial_studio"] [class*="from-black/"] .text-white,
+html[data-theme="editorial_studio"] [class*="from-black/"] .text-zinc-200 {
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] {
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] .bg-\[\#171719\] {
+  background-color: #171719;
+  box-shadow: none;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] .bg-\[\#242428\] {
+  background-color: #242428;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] .text-white,
+html[data-theme="editorial_studio"] [data-force-dark="true"] h1,
+html[data-theme="editorial_studio"] [data-force-dark="true"] h2 {
+  color: #ffffff;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] .text-zinc-200 {
+  color: #e4e4e7;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] .text-zinc-300 {
+  color: #d4d4d8;
+}
+
+html[data-theme="editorial_studio"] [data-force-dark="true"] .text-zinc-400 {
+  color: #a1a1aa;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#141d19\]\/95 {
+  background-color: #1d592c;
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#141d19\]\/95 * {
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#1f1214\]\/95 {
+  background-color: #5c261f;
+  color: #f5ebdd;
+}
+
+html[data-theme="editorial_studio"] .bg-\[\#1f1214\]\/95 * {
+  color: #f5ebdd;
+}
+
+/* Editorial Photo Frame */
+html[data-theme="editorial_studio"] .editorial-photo-frame {
+  overflow: hidden;
+  border: 1px solid rgba(40, 35, 29, 0.24);
+  background-color: #28231d;
+}
+
+/* ============================================================================
+   CLASSIC DARK & NEUTRAL THEMES
+   ============================================================================ */
+
+html[data-theme="dark"] {
+  --app-outer-bg: #111113;
+  --app-surface-1: #171719;
+  --app-surface-2: #242428;
+  --app-text-main: #f4f4f5;
+  --app-scroll-track: #141416;
+  --app-scroll-thumb: #2f2f35;
+  --app-scroll-thumb-hover: #45454e;
+}
+
+html[data-theme="neutral"] {
+  --app-outer-bg: #232328;
+  --app-surface-1: #171719;
+  --app-surface-2: #242428;
+  --app-text-main: #f4f4f5;
+  --app-scroll-track: #1f1f24;
+  --app-scroll-thumb: #3c3c45;
+  --app-scroll-thumb-hover: #52525b;
+}
+
+/* ============================================================================
+   THEME 1: HÀO KHÍ 50 NĂM (HOÀNG HOA THÁM ROYAL NAVY + GOLD + YOUTH RED)
+   Inspired by 50th Anniversary Emblem (1976~2026) & Gold-on-Blue School Gate
+   ============================================================================ */
+
+html[data-theme="hht_50_gold"] {
+  --app-outer-bg: #08142b;
+  --app-surface-1: #0d1d3c;
+  --app-surface-2: #142a54;
+  --app-text-main: #f8fafc;
+  --app-scroll-track: #08142b;
+  --app-scroll-thumb: #244075;
+  --app-scroll-thumb-hover: #f2c230;
+}
+
+html[data-theme="hht_50_gold"] .theme-outer-shell {
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% -10%, rgba(242, 194, 48, 0.12), transparent 65%),
+    radial-gradient(ellipse 60% 40% at 100% 20%, rgba(225, 29, 46, 0.08), transparent 60%);
+}
+
+html[data-theme="hht_50_gold"] header {
+  border-top: 2px solid #f2c230;
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#111113\] {
+  background-color: #08142b;
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#171719\] {
+  background-color: #0d1d3c;
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#171719\]\/95 {
+  background-color: rgba(13, 29, 60, 0.95);
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#171719\]\/98 {
+  background-color: rgba(13, 29, 60, 0.98);
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#242428\] {
+  background-color: #142a54;
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#242428\]\/50 {
+  background-color: rgba(20, 42, 84, 0.55);
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#242428\]\/70 {
+  background-color: rgba(20, 42, 84, 0.72);
+}
+
+html[data-theme="hht_50_gold"] .border-white\/10 {
+  border-color: rgba(242, 194, 48, 0.2);
+}
+
+html[data-theme="hht_50_gold"] .border-white\/15 {
+  border-color: rgba(242, 194, 48, 0.3);
+}
+
+html[data-theme="hht_50_gold"] .border-white\/5 {
+  border-color: rgba(242, 194, 48, 0.12);
+}
+
+html[data-theme="hht_50_gold"] .text-zinc-300 {
+  color: #dbe6f8;
+}
+
+html[data-theme="hht_50_gold"] .text-zinc-400 {
+  color: #9cb4db;
+}
+
+html[data-theme="hht_50_gold"] .text-zinc-500 {
+  color: #7c97c4;
+}
+
+html[data-theme="hht_50_gold"] .font-mono-num.text-\[\#F02028\],
+html[data-theme="hht_50_gold"] h3.text-\[\#F02028\] {
+  color: #f2c230;
+}
+
+html[data-theme="hht_50_gold"] .bg-\[\#F02028\] {
+  background-color: #e11d2e;
+}
+
+/* ============================================================================
+   THEME 2: NẮNG SÂN TRƯỜNG (SUNLIT CAMPUS — SKY BLUE COLUMNS & CRISP WHITE)
+   Inspired by HHT Blue Hallways, White School Uniforms & Terracotta Roof
+   ============================================================================ */
+
+html[data-theme="sunlit_campus"] {
+  --app-outer-bg: #eef4fb;
+  --app-surface-1: #ffffff;
+  --app-surface-2: #f4f8fd;
+  --app-text-main: #132238;
+  --app-scroll-track: #e4eef9;
+  --app-scroll-thumb: #9ec0e6;
+  --app-scroll-thumb-hover: #0d5bb5;
+}
+
+html[data-theme="sunlit_campus"] .theme-outer-shell {
+  background-image:
+    radial-gradient(ellipse 75% 40% at 20% 0%, rgba(74, 144, 217, 0.14), transparent 65%),
+    radial-gradient(ellipse 60% 35% at 90% 10%, rgba(46, 125, 79, 0.08), transparent 60%);
+}
+
+html[data-theme="sunlit_campus"] header {
+  border-top: 3px solid #0d5bb5;
+  box-shadow: 0 2px 14px rgba(13, 91, 181, 0.08);
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#111113\] {
+  background-color: #eef4fb;
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#171719\] {
+  background-color: #ffffff;
+  box-shadow: 0 2px 12px rgba(15, 45, 92, 0.06);
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#171719\]\/95 {
+  background-color: rgba(255, 255, 255, 0.94);
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#171719\]\/98 {
+  background-color: rgba(255, 255, 255, 0.98);
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#242428\] {
+  background-color: #f4f8fd;
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#242428\]\/50 {
+  background-color: rgba(244, 248, 253, 0.7);
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#242428\]\/70 {
+  background-color: rgba(244, 248, 253, 0.85);
+}
+
+html[data-theme="sunlit_campus"] .bg-white\/\[0\.04\],
+html[data-theme="sunlit_campus"] .bg-white\/\[0\.03\] {
+  background-color: rgba(13, 91, 181, 0.05);
+}
+
+html[data-theme="sunlit_campus"] .hover\:bg-white\/10:hover,
+html[data-theme="sunlit_campus"] .hover\:bg-white\/5:hover {
+  background-color: rgba(13, 91, 181, 0.1);
+}
+
+html[data-theme="sunlit_campus"] .border-white\/10 {
+  border-color: rgba(13, 91, 181, 0.16);
+}
+
+html[data-theme="sunlit_campus"] .border-white\/15 {
+  border-color: rgba(13, 91, 181, 0.24);
+}
+
+html[data-theme="sunlit_campus"] .border-white\/5 {
+  border-color: rgba(13, 91, 181, 0.1);
+}
+
+html[data-theme="sunlit_campus"] .ring-white\/10 {
+  --tw-ring-color: rgba(13, 91, 181, 0.16);
+}
+
+html[data-theme="sunlit_campus"] h1,
+html[data-theme="sunlit_campus"] h2,
+html[data-theme="sunlit_campus"] .font-display {
+  color: #0a2e6e;
+}
+
+html[data-theme="sunlit_campus"] .text-white,
+html[data-theme="sunlit_campus"] .text-zinc-100 {
+  color: #132238;
+}
+
+html[data-theme="sunlit_campus"] .text-zinc-200 {
+  color: #1e3352;
+}
+
+html[data-theme="sunlit_campus"] .text-zinc-300 {
+  color: #334a6b;
+}
+
+html[data-theme="sunlit_campus"] .text-zinc-400 {
+  color: #546c8e;
+}
+
+html[data-theme="sunlit_campus"] .text-zinc-500 {
+  color: #6b82a3;
+}
+
+html[data-theme="sunlit_campus"] .hover\:text-white:hover {
+  color: #0a2e6e;
+}
+
+html[data-theme="sunlit_campus"] .text-\[\#F02028\] {
+  color: #d9232e;
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#F02028\] {
+  background-color: #d9232e;
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#F02028\]\/15 {
+  background-color: rgba(13, 91, 181, 0.12);
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#F02028\]\/10 {
+  background-color: rgba(13, 91, 181, 0.1);
+}
+
+html[data-theme="sunlit_campus"] input,
+html[data-theme="sunlit_campus"] textarea,
+html[data-theme="sunlit_campus"] select {
+  color: #132238;
+}
+
+/* ============================================================================
+   THEME 3: TRANG KỶ YẾU HOÀI NIỆM (VINTAGE ARCHIVAL YEARBOOK)
+   Inspired by Tilted Archival Photo on Report Card, Terracotta Roof & Ink Blue
+   ============================================================================ */
+
+html[data-theme="vintage_yearbook"] {
+  --app-outer-bg: #f3ede0;
+  --app-surface-1: #fffdf8;
+  --app-surface-2: #f7f1e3;
+  --app-text-main: #1d2d44;
+  --app-scroll-track: #eae1cf;
+  --app-scroll-thumb: #c4b192;
+  --app-scroll-thumb-hover: #9e7b47;
+}
+
+html[data-theme="vintage_yearbook"] .theme-outer-shell {
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% 0%, rgba(201, 150, 26, 0.1), transparent 65%),
+    radial-gradient(ellipse 50% 40% at 0% 100%, rgba(201, 42, 42, 0.06), transparent 60%);
+}
+
+html[data-theme="vintage_yearbook"] header {
+  border-top: 3px solid #c92a2a;
+  box-shadow: 0 2px 12px rgba(105, 76, 36, 0.08);
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#111113\] {
+  background-color: #f3ede0;
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#171719\] {
+  background-color: #fffdf8;
+  box-shadow: 0 3px 14px rgba(92, 69, 34, 0.07);
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#171719\]\/95 {
+  background-color: rgba(255, 253, 248, 0.95);
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#171719\]\/98 {
+  background-color: rgba(255, 253, 248, 0.98);
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#242428\] {
+  background-color: #f7f1e3;
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#242428\]\/50 {
+  background-color: rgba(247, 241, 227, 0.72);
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#242428\]\/70 {
+  background-color: rgba(247, 241, 227, 0.88);
+}
+
+html[data-theme="vintage_yearbook"] .bg-white\/\[0\.04\],
+html[data-theme="vintage_yearbook"] .bg-white\/\[0\.03\] {
+  background-color: rgba(166, 128, 76, 0.07);
+}
+
+html[data-theme="vintage_yearbook"] .hover\:bg-white\/10:hover,
+html[data-theme="vintage_yearbook"] .hover\:bg-white\/5:hover {
+  background-color: rgba(166, 128, 76, 0.14);
+}
+
+html[data-theme="vintage_yearbook"] .border-white\/10 {
+  border-color: rgba(154, 120, 72, 0.24);
+}
+
+html[data-theme="vintage_yearbook"] .border-white\/15 {
+  border-color: rgba(154, 120, 72, 0.34);
+}
+
+html[data-theme="vintage_yearbook"] .border-white\/5 {
+  border-color: rgba(154, 120, 72, 0.14);
+}
+
+html[data-theme="vintage_yearbook"] .ring-white\/10 {
+  --tw-ring-color: rgba(154, 120, 72, 0.25);
+}
+
+html[data-theme="vintage_yearbook"] h1,
+html[data-theme="vintage_yearbook"] h2,
+html[data-theme="vintage_yearbook"] .font-display {
+  color: #16325c;
+}
+
+html[data-theme="vintage_yearbook"] .text-white,
+html[data-theme="vintage_yearbook"] .text-zinc-100 {
+  color: #1d2d44;
+}
+
+html[data-theme="vintage_yearbook"] .text-zinc-200 {
+  color: #2b3c54;
+}
+
+html[data-theme="vintage_yearbook"] .text-zinc-300 {
+  color: #425066;
+}
+
+html[data-theme="vintage_yearbook"] .text-zinc-400 {
+  color: #6b6356;
+}
+
+html[data-theme="vintage_yearbook"] .text-zinc-500 {
+  color: #827868;
+}
+
+html[data-theme="vintage_yearbook"] .hover\:text-white:hover {
+  color: #16325c;
+}
+
+html[data-theme="vintage_yearbook"] .text-\[\#F02028\] {
+  color: #c92a2a;
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#F02028\] {
+  background-color: #c92a2a;
+}
+
+html[data-theme="vintage_yearbook"] .bg-\[\#F02028\]\/15 {
+  background-color: rgba(201, 42, 42, 0.11);
+}
+
+html[data-theme="vintage_yearbook"] input,
+html[data-theme="vintage_yearbook"] textarea,
+html[data-theme="vintage_yearbook"] select {
+  color: #1d2d44;
+}
+
+/* ============================================================================
+   LIGHT THEME PROTECTION FOR DARK OVERLAYS, RED BUTTONS & MEDIA LIGHTBOXES
+   Ensures crisp white text on primary red buttons, photo overlays & lightboxes
+   ============================================================================ */
+
+html[data-theme="sunlit_campus"] .bg-\[\#F02028\],
+html[data-theme="sunlit_campus"] .bg-\[\#F02028\] *,
+html[data-theme="vintage_yearbook"] .bg-\[\#F02028\],
+html[data-theme="vintage_yearbook"] .bg-\[\#F02028\] *,
+html[data-theme="sunlit_campus"] [class*="bg-black/"],
+html[data-theme="sunlit_campus"] [class*="bg-black/"] .text-white,
+html[data-theme="sunlit_campus"] [class*="bg-black/"] .text-zinc-200,
+html[data-theme="sunlit_campus"] [class*="bg-black/"] .text-zinc-300,
+html[data-theme="vintage_yearbook"] [class*="bg-black/"],
+html[data-theme="vintage_yearbook"] [class*="bg-black/"] .text-white,
+html[data-theme="vintage_yearbook"] [class*="bg-black/"] .text-zinc-200,
+html[data-theme="vintage_yearbook"] [class*="bg-black/"] .text-zinc-300,
+html[data-theme="sunlit_campus"] [class*="from-black/"] .text-white,
+html[data-theme="sunlit_campus"] [class*="from-black/"] .text-zinc-200,
+html[data-theme="vintage_yearbook"] [class*="from-black/"] .text-white,
+html[data-theme="vintage_yearbook"] [class*="from-black/"] .text-zinc-200 {
+  color: #ffffff;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"],
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] {
+  color: #f4f4f5;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"] .bg-\[\#171719\],
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] .bg-\[\#171719\] {
+  background-color: #171719;
+  box-shadow: none;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"] .bg-\[\#242428\],
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] .bg-\[\#242428\] {
+  background-color: #242428;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"] .text-white,
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] .text-white,
+html[data-theme="sunlit_campus"] [data-force-dark="true"] h1,
+html[data-theme="sunlit_campus"] [data-force-dark="true"] h2,
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] h1,
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] h2 {
+  color: #ffffff;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"] .text-zinc-200,
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] .text-zinc-200 {
+  color: #e4e4e7;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"] .text-zinc-300,
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] .text-zinc-300 {
+  color: #d4d4d8;
+}
+
+html[data-theme="sunlit_campus"] [data-force-dark="true"] .text-zinc-400,
+html[data-theme="vintage_yearbook"] [data-force-dark="true"] .text-zinc-400 {
+  color: #a1a1aa;
+}
+
+html[data-theme="sunlit_campus"] .bg-\[\#141d19\]\/95,
+html[data-theme="vintage_yearbook"] .bg-\[\#141d19\]\/95,
+html[data-theme="sunlit_campus"] .bg-\[\#1f1214\]\/95,
+html[data-theme="vintage_yearbook"] .bg-\[\#1f1214\]\/95 {
+  color: #ffffff;
+}
+
+/* ============================================================================
+   THEME 4: NGỌN LỬA THANH NIÊN (MODERN YOUTH UNION SLATE + RED + GATE BLUE)
+   Refined Evolution of Dark Mode infused with HHT Blue, Red & 50-Year Gold
+   ============================================================================ */
+
+html[data-theme="youth_flame"] {
+  --app-outer-bg: #0f172a;
+  --app-surface-1: #162033;
+  --app-surface-2: #1e2c45;
+  --app-text-main: #f8fafc;
+  --app-scroll-track: #0f172a;
+  --app-scroll-thumb: #334a70;
+  --app-scroll-thumb-hover: #2589f5;
+}
+
+html[data-theme="youth_flame"] .theme-outer-shell {
+  background-image:
+    radial-gradient(ellipse 70% 45% at 15% 0%, rgba(37, 137, 245, 0.14), transparent 62%),
+    radial-gradient(ellipse 55% 40% at 88% 12%, rgba(240, 32, 40, 0.11), transparent 58%);
+}
+
+html[data-theme="youth_flame"] header {
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, #2589f5 0%, #f02028 55%, #f5c518 100%) 1;
+}
+
+html[data-theme="youth_flame"] .bg-\[\#111113\] {
+  background-color: #0f172a;
+}
+
+html[data-theme="youth_flame"] .bg-\[\#171719\] {
+  background-color: #162033;
+}
+
+html[data-theme="youth_flame"] .bg-\[\#171719\]\/95 {
+  background-color: rgba(22, 32, 51, 0.95);
+}
+
+html[data-theme="youth_flame"] .bg-\[\#171719\]\/98 {
+  background-color: rgba(22, 32, 51, 0.98);
+}
+
+html[data-theme="youth_flame"] .bg-\[\#242428\] {
+  background-color: #1e2c45;
+}
+
+html[data-theme="youth_flame"] .bg-\[\#242428\]\/50 {
+  background-color: rgba(30, 44, 69, 0.58);
+}
+
+html[data-theme="youth_flame"] .bg-\[\#242428\]\/70 {
+  background-color: rgba(30, 44, 69, 0.74);
+}
+
+html[data-theme="youth_flame"] .border-white\/10 {
+  border-color: rgba(96, 165, 250, 0.18);
+}
+
+html[data-theme="youth_flame"] .border-white\/15 {
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+html[data-theme="youth_flame"] .border-white\/5 {
+  border-color: rgba(96, 165, 250, 0.11);
+}
+
+html[data-theme="youth_flame"] .text-zinc-300 {
+  color: #dbeafe;
+}
+
+html[data-theme="youth_flame"] .text-zinc-400 {
+  color: #94a3b8;
+}
+
+/* ============================================================================
+   FRAME STYLE: KHUNG ẢNH KỶ YẾU NGHỆ THUẬT (YEARBOOK PHOTO FRAMING)
+   ============================================================================ */
+
+html[data-frame="yearbook"] figure {
+  padding: 0.45rem;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+html[data-frame="yearbook"] figure:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+}
+
+html[data-frame="yearbook"] figure > div:first-child {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+}
+
+html[data-theme="sunlit_campus"][data-frame="yearbook"] figure > div:first-child,
+html[data-theme="vintage_yearbook"][data-frame="yearbook"] figure > div:first-child {
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(22, 50, 92, 0.12);
+}
+
+html[data-frame="yearbook"] main .aspect-square,
+html[data-frame="yearbook"] main .aspect-\[4\/3\] {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
 }
 
 @media (prefers-reduced-motion: reduce) {

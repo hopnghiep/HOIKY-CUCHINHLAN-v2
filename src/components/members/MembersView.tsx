@@ -22,7 +22,7 @@ import {
 import { useMemoir } from '../../context/MemoirContext';
 import type { CohortItem, MemberGroup, MemberProfile, SchoolEvent } from '../../types/memoir';
 import { ResilientImage } from '../common/ResilientMedia';
-import { CollapsibleText } from '../common/CollapsibleText';
+import { InlineEditableText } from '../common/InlineEditableText';
 import { MemberDetailModal } from './MemberDetailModal';
 import { MemberFormModal } from './MemberFormModal';
 import { CohortFormModal } from './CohortFormModal';
@@ -41,10 +41,10 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
     isSignedIn,
     currentUser,
     setActiveTab,
+    canEditMember,
     updateData,
     updateSelfMemberProfile,
     createOwnMemberProfile,
-    publishMemberUpdate,
     saveAndPublishEvent,
   } = useMemoir();
   const [search, setSearch] = useState('');
@@ -207,13 +207,9 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
 
     updateSelfMemberProfile(
       saved,
-      publishImmediately
-        ? ''
-        : `Đã lưu chỉnh sửa hồ sơ ${saved.fullName}. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.`
+      `Đã lưu và cập nhật hồ sơ ${saved.fullName}.`
     );
-    if (publishImmediately) {
-      await publishMemberUpdate(saved.id);
-    } else {
+    if (!publishImmediately) {
       setSelectedMemberId(saved.id);
     }
   };
@@ -554,7 +550,7 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
           <div className="rounded-2xl border border-white/10 bg-[#171719] p-3">
             <div className="grid grid-cols-11 items-center gap-2">
               <div className="col-span-5 space-y-1.5">
-                <div className="aspect-square overflow-hidden rounded-xl bg-[#242428]">
+                <div className="editorial-photo-frame aspect-square overflow-hidden rounded-xl bg-[#242428]">
                   <ResilientImage
                     src={member.youthPhoto}
                     alt={`${member.fullName} thời trẻ`}
@@ -586,7 +582,7 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
               </div>
 
               <div className="col-span-5 space-y-1.5">
-                <div className="aspect-square overflow-hidden rounded-xl bg-[#242428] ring-1 ring-white/10">
+                <div className="editorial-photo-frame aspect-square overflow-hidden rounded-xl bg-[#242428] ring-1 ring-white/10">
                   <ResilientImage
                     src={member.presentPhoto}
                     alt={`${member.fullName} hiện tại`}
@@ -617,16 +613,96 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
 
           {/* Identity & Career Info */}
           <div className="space-y-1.5">
-            <h2 className="font-display text-xl font-semibold text-white truncate">{member.fullName}</h2>
-            <p className="text-xs font-medium text-[#F02028] truncate">{member.role || 'Đoàn viên Chi đoàn'}</p>
-            <p className="text-xs text-zinc-300 truncate">
-              {member.occupation || 'Đang cập nhật nghề nghiệp'}
-              {member.field ? ` · ${member.field}` : ''}
-            </p>
+            <InlineEditableText
+              as="h2"
+              value={member.fullName}
+              canEdit={canEditMember(member)}
+              stopPropagation
+              label="Họ và tên thành viên"
+              onSave={(val) =>
+                updateSelfMemberProfile(
+                  { ...member, fullName: val },
+                  `Đã cập nhật họ tên thành "${val}".`
+                )
+              }
+              className="font-display text-xl font-semibold text-white truncate"
+            />
+            <InlineEditableText
+              as="p"
+              value={member.role || ''}
+              emptyDisplay="Đoàn viên Chi đoàn"
+              allowEmpty
+              canEdit={canEditMember(member)}
+              stopPropagation
+              label="Chức vụ / Vai trò"
+              onSave={(val) =>
+                updateSelfMemberProfile(
+                  { ...member, role: val },
+                  `Đã cập nhật chức vụ cho ${member.fullName}.`
+                )
+              }
+              className="text-xs font-medium text-[#F02028] truncate"
+            />
+            <div className="text-xs text-zinc-300 truncate flex items-center gap-1">
+              <InlineEditableText
+                as="span"
+                inline
+                value={member.occupation || ''}
+                emptyDisplay="Đang cập nhật nghề nghiệp"
+                allowEmpty
+                canEdit={canEditMember(member)}
+                stopPropagation
+                label="Nghề nghiệp"
+                onSave={(val) =>
+                  updateSelfMemberProfile(
+                    { ...member, occupation: val },
+                    `Đã cập nhật nghề nghiệp cho ${member.fullName}.`
+                  )
+                }
+                className="text-xs text-zinc-300"
+              />
+              {member.field && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <InlineEditableText
+                    as="span"
+                    inline
+                    value={member.field}
+                    allowEmpty
+                    canEdit={canEditMember(member)}
+                    stopPropagation
+                    label="Lĩnh vực"
+                    onSave={(val) =>
+                      updateSelfMemberProfile(
+                        { ...member, field: val },
+                        `Đã cập nhật lĩnh vực cho ${member.fullName}.`
+                      )
+                    }
+                    className="text-xs text-zinc-300"
+                  />
+                </>
+              )}
+            </div>
             <div className="flex items-center gap-1.5 text-xs text-zinc-400 pt-0.5">
               <Calendar className="w-3.5 h-3.5 text-zinc-500" />
               <span>Gia nhập: </span>
-              <span className="font-mono-num">{member.joinDate || 'Chưa cập nhật'}</span>
+              <InlineEditableText
+                as="span"
+                inline
+                value={member.joinDate || ''}
+                emptyDisplay="Chưa cập nhật"
+                allowEmpty
+                canEdit={canEditMember(member)}
+                stopPropagation
+                label="Ngày tham gia"
+                onSave={(val) =>
+                  updateSelfMemberProfile(
+                    { ...member, joinDate: val },
+                    `Đã cập nhật ngày tham gia cho ${member.fullName}.`
+                  )
+                }
+                className="font-mono-num"
+              />
             </div>
           </div>
 
@@ -634,10 +710,24 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
           {member.achievements.length > 0 && (
             <div className="rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2.5 text-xs text-zinc-300 space-y-1">
               <div className="font-medium text-white">Thành tích nổi bật</div>
-              <CollapsibleText
+              <InlineEditableText
                 as="p"
-                text={member.achievements[0]}
+                multiline
+                collapsible
                 collapsedLines={2}
+                stopPropagation
+                value={member.achievements[0]}
+                canEdit={canEditMember(member)}
+                label={`Thành tích nổi bật — ${member.fullName}`}
+                onSave={(val) =>
+                  updateSelfMemberProfile(
+                    {
+                      ...member,
+                      achievements: member.achievements.map((item, i) => (i === 0 ? val : item)),
+                    },
+                    `Đã cập nhật thành tích nổi bật của ${member.fullName}.`
+                  )
+                }
                 className="text-xs text-zinc-300 leading-relaxed"
               />
             </div>
@@ -695,17 +785,17 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Section Header */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-5">
+      <section className="corp-hero-sheet editorial-open-section rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-8 lg:p-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <div className="text-xs font-medium text-zinc-400">
+            <div className="text-xs font-medium tracking-[0.08em] uppercase text-zinc-400">
               Thư viện hồ sơ qua các thời kỳ · <span className="font-mono-num">{cohorts.length}</span> niên khóa ·{' '}
               <span className="font-mono-num">{memberCount}</span> đoàn viên ·{' '}
               <span className="font-mono-num">{guestCount}</span> khách mời / người có liên quan
             </div>
-            <h1 className="mt-1 font-display text-2xl sm:text-4xl font-semibold text-white">
+            <h1 className="mt-2 font-display editorial-section-title text-2xl sm:text-4xl font-semibold text-white">
               Thành viên - Khách mời / Người có liên quan
             </h1>
           </div>
@@ -899,7 +989,27 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
                         {cohort?.period && (
                           <>
                             <span aria-hidden="true">·</span>
-                            <span>{cohort.period}</span>
+                            <InlineEditableText
+                              as="span"
+                              inline
+                              value={cohort.period}
+                              canEdit={isAdmin}
+                              label="Giai đoạn niên khóa"
+                              onSave={(val) =>
+                                updateData(
+                                  (prev) => ({
+                                    ...prev,
+                                    cohorts: (prev.cohorts || []).map((c) =>
+                                      c.id === cohort.id
+                                        ? { ...c, period: val, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                        : c
+                                    ),
+                                  }),
+                                  'Đã cập nhật giai đoạn niên khóa.'
+                                )
+                              }
+                              className="text-xs text-zinc-400"
+                            />
                           </>
                         )}
                         <span aria-hidden="true">·</span>
@@ -917,14 +1027,55 @@ export function MembersView({ initialGroup = 'member' }: { initialGroup?: Member
                           </>
                         )}
                       </div>
-                      <h2 className="font-display text-xl sm:text-2xl font-semibold text-white">
-                        {cohort ? cohort.name : 'Chưa phân loại niên khóa'}
-                      </h2>
+                      {cohort ? (
+                        <InlineEditableText
+                          as="h2"
+                          value={cohort.name}
+                          canEdit={isAdmin}
+                          label="Tên niên khóa"
+                          onSave={(val) =>
+                            updateData(
+                              (prev) => ({
+                                ...prev,
+                                cohorts: (prev.cohorts || []).map((c) =>
+                                  c.id === cohort.id
+                                    ? { ...c, name: val, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                    : c
+                                ),
+                              }),
+                              `Đã cập nhật tên niên khóa thành "${val}".`
+                            )
+                          }
+                          className="font-display text-xl sm:text-2xl font-semibold text-white"
+                        />
+                      ) : (
+                        <h2 className="font-display text-xl sm:text-2xl font-semibold text-white">
+                          Chưa phân loại niên khóa
+                        </h2>
+                      )}
                       {cohort?.description && (
-                        <CollapsibleText
+                        <InlineEditableText
                           as="p"
-                          text={cohort.description}
+                          multiline
+                          collapsible
                           collapsedLines={2}
+                          allowEmpty
+                          value={cohort.description}
+                          canEdit={isAdmin}
+                          label={`Mô tả niên khóa — ${cohort.name}`}
+                          onSave={(val) =>
+                            updateData(
+                              (prev) => ({
+                                ...prev,
+                                cohorts: (prev.cohorts || []).map((c) =>
+                                  c.id === cohort.id
+                                    ? { ...c, description: val, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                    : c
+                                ),
+                              }),
+                              'Đã cập nhật mô tả niên khóa.'
+                            )
+                          }
                           className="text-xs sm:text-sm text-zinc-300 leading-relaxed max-w-3xl"
                         />
                       )}

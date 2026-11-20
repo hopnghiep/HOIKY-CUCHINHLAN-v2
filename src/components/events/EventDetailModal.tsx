@@ -3,7 +3,7 @@ import { Calendar, Clock, Edit3, Film, MapPin, RefreshCw, Save, Sparkles, Users,
 import { useMemoir } from '../../context/MemoirContext';
 import type { SchoolEvent } from '../../types/memoir';
 import { ResilientImage } from '../common/ResilientMedia';
-import { CollapsibleText } from '../common/CollapsibleText';
+import { InlineEditableText } from '../common/InlineEditableText';
 import { getAdminAuthHeaders } from '../../services/authToken';
 
 interface EventDetailModalProps {
@@ -30,6 +30,12 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
     selectedAlbum === 'Tất cả'
       ? event.photos
       : event.photos.filter((p) => (p.albumName || 'Chung') === selectedAlbum);
+
+  const saveEventPatch = (patch: Partial<SchoolEvent>) =>
+    saveAndPublishEvent(
+      { ...event, ...patch, dataOrigin: 'real', updatedAt: new Date().toISOString() },
+      { syncToApp: true }
+    );
 
   const handleGenerateAiSummary = async () => {
     setSummarizing(true);
@@ -85,9 +91,14 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
               {event.category} · <span className="font-mono-num">{event.date}</span>
               {event.dataOrigin === 'sample' ? ' · Sự kiện mẫu minh họa' : ''}
             </div>
-            <h2 id="event-detail-title" className="truncate font-display text-xl sm:text-2xl font-semibold text-white">
-              {event.title}
-            </h2>
+            <InlineEditableText
+              as="h2"
+              value={event.title}
+              canEdit={isAdmin}
+              label="Tên sự kiện"
+              onSave={(val) => saveEventPatch({ title: val })}
+              className="truncate font-display text-xl sm:text-2xl font-semibold text-white"
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -166,7 +177,15 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                 <div className="flex items-center gap-2 text-zinc-200">
                   <Calendar className="w-4 h-4 text-[#F02028]" />
                   <span>Ngày tổ chức:</span>
-                  <span className="font-mono-num font-medium">{event.date}</span>
+                  <InlineEditableText
+                    as="span"
+                    inline
+                    value={event.date}
+                    canEdit={isAdmin}
+                    label="Ngày tổ chức"
+                    onSave={(val) => saveEventPatch({ date: val })}
+                    className="font-mono-num font-medium"
+                  />
                 </div>
                 <div className="flex items-center gap-2 text-zinc-200">
                   <Clock className="w-4 h-4 text-[#F02028]" />
@@ -177,7 +196,16 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                 </div>
                 <div className="flex items-start gap-2 text-zinc-200">
                   <MapPin className="w-4 h-4 text-[#F02028] shrink-0 mt-0.5" />
-                  <span>{event.location || 'Chưa cập nhật địa điểm'}</span>
+                  <InlineEditableText
+                    as="span"
+                    value={event.location || ''}
+                    emptyDisplay="Chưa cập nhật địa điểm"
+                    allowEmpty
+                    canEdit={isAdmin}
+                    label="Địa điểm tổ chức"
+                    onSave={(val) => saveEventPatch({ location: val })}
+                    className="text-zinc-200"
+                  />
                 </div>
               </div>
 
@@ -203,10 +231,17 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                     </button>
                   )}
                 </div>
-                <CollapsibleText
+                <InlineEditableText
                   as="p"
-                  text={event.summary || 'Chưa có bản tóm tắt sự kiện.'}
+                  multiline
+                  collapsible
                   collapsedLines={2}
+                  allowEmpty
+                  value={event.summary || ''}
+                  emptyDisplay="Chưa có bản tóm tắt sự kiện."
+                  canEdit={isAdmin}
+                  label="Tóm tắt sự kiện"
+                  onSave={(val) => saveEventPatch({ summary: val })}
                   className="text-sm text-zinc-200 leading-relaxed"
                 />
               </div>
@@ -217,28 +252,49 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F02028]">Nội dung giới thiệu</h3>
-              <CollapsibleText
+              <InlineEditableText
                 as="p"
-                text={event.intro || 'Chưa cập nhật.'}
+                multiline
+                collapsible
                 collapsedLines={3}
+                allowEmpty
+                value={event.intro || ''}
+                emptyDisplay="Chưa cập nhật."
+                canEdit={isAdmin}
+                label="Nội dung giới thiệu"
+                onSave={(val) => saveEventPatch({ intro: val })}
                 className="text-sm text-zinc-300 leading-relaxed"
               />
             </div>
             <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F02028]">Diễn biến sự kiện</h3>
-              <CollapsibleText
+              <InlineEditableText
                 as="p"
-                text={event.proceedings || 'Chưa cập nhật.'}
+                multiline
+                collapsible
                 collapsedLines={3}
+                allowEmpty
+                value={event.proceedings || ''}
+                emptyDisplay="Chưa cập nhật."
+                canEdit={isAdmin}
+                label="Diễn biến sự kiện"
+                onSave={(val) => saveEventPatch({ proceedings: val })}
                 className="text-sm text-zinc-300 leading-relaxed"
               />
             </div>
             <div className="rounded-2xl border border-white/10 bg-[#242428] p-5 space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F02028]">Thành tích & Kết quả</h3>
-              <CollapsibleText
+              <InlineEditableText
                 as="p"
-                text={event.results || 'Chưa cập nhật.'}
+                multiline
+                collapsible
                 collapsedLines={3}
+                allowEmpty
+                value={event.results || ''}
+                emptyDisplay="Chưa cập nhật."
+                canEdit={isAdmin}
+                label="Thành tích & Kết quả"
+                onSave={(val) => saveEventPatch({ results: val })}
                 className="text-sm text-zinc-300 leading-relaxed"
               />
             </div>
@@ -375,7 +431,22 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                       />
                     </div>
                     <figcaption className="p-3 text-xs text-zinc-300">
-                      <div className="font-medium text-white truncate">{photo.caption || 'Ảnh tư liệu'}</div>
+                      <InlineEditableText
+                        as="div"
+                        value={photo.caption || ''}
+                        emptyDisplay="Ảnh tư liệu"
+                        allowEmpty
+                        canEdit={isAdmin}
+                        label="Chú thích ảnh sự kiện"
+                        onSave={(val) =>
+                          saveEventPatch({
+                            photos: event.photos.map((item) =>
+                              item.id === photo.id ? { ...item, caption: val } : item
+                            ),
+                          })
+                        }
+                        className="font-medium text-white truncate"
+                      />
                       <div className="text-[11px] text-zinc-400 mt-0.5">Album: {photo.albumName || 'Chung'}</div>
                     </figcaption>
                   </figure>
@@ -395,7 +466,20 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                 {event.videos.map((vid) => (
                   <div key={vid.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#242428] p-3 space-y-2">
                     <video controls className="w-full rounded-xl bg-black aspect-video" src={vid.url} />
-                    <div className="text-xs font-medium text-white truncate">{vid.title}</div>
+                    <InlineEditableText
+                      as="div"
+                      value={vid.title}
+                      canEdit={isAdmin}
+                      label="Tiêu đề video tư liệu"
+                      onSave={(val) =>
+                        saveEventPatch({
+                          videos: event.videos.map((item) =>
+                            item.id === vid.id ? { ...item, title: val } : item
+                          ),
+                        })
+                      }
+                      className="text-xs font-medium text-white truncate"
+                    />
                   </div>
                 ))}
               </div>

@@ -101,11 +101,11 @@
         },
         "home": {
           "type": "object",
-          "description": "Home memoir sections: hero, history, meaning, anthem, socialChannels, labels, dataOrigin."
+          "description": "Home memoir sections: hero (including optional galleryPhotos), history, meaning, anthem, socialChannels, labels, dataOrigin."
         },
         "settings": {
           "type": "object",
-          "description": "Application display and behavior settings."
+          "description": "Application display and behavior settings: themeMode (corporate_blue|editorial_studio|dark|neutral|hht_50_gold|sunlit_campus|vintage_yearbook|youth_flame), optional fontPreset (auto|corporate_inter|editorial_swiss|default|heritage_50|student_fresh|yearbook_art|youth_power), optional frameStyle (modern|yearbook), showSampleBanner, autoSaveEnabled, compactCards."
         },
         "visibility": {
           "type": "string",
@@ -214,9 +214,19 @@
           "minLength": 1,
           "maxLength": 12000
         },
+        "thumbnailImage": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Optional thumbnail image URL accompanying the leader message."
+        },
         "displayDate": {
           "type": "string",
           "maxLength": 40
+        },
+        "orderIndex": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100000
         },
         "dataOrigin": {
           "type": "string",

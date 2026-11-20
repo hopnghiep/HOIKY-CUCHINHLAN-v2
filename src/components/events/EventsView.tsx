@@ -16,7 +16,7 @@ import {
 import { useMemoir } from '../../context/MemoirContext';
 import type { EventCategory, SchoolEvent } from '../../types/memoir';
 import { ResilientImage } from '../common/ResilientMedia';
-import { CollapsibleText } from '../common/CollapsibleText';
+import { InlineEditableText } from '../common/InlineEditableText';
 import { EventDetailModal } from './EventDetailModal';
 import { EventFormModal } from './EventFormModal';
 
@@ -97,15 +97,15 @@ export function EventsView() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header & Controls */}
-      <section className="rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-5">
+      <section className="corp-hero-sheet editorial-open-section rounded-3xl border border-white/10 bg-[#171719] p-6 sm:p-8 lg:p-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <div className="text-xs font-medium text-zinc-400">
+            <div className="text-xs font-medium tracking-[0.08em] uppercase text-zinc-400">
               Biên niên hoạt động · <span className="font-mono-num">{data.events.length}</span> sự kiện lưu trữ
             </div>
-            <h1 className="mt-1 font-display text-2xl sm:text-4xl font-semibold text-white">
+            <h1 className="mt-2 font-display editorial-section-title text-2xl sm:text-4xl font-semibold text-white">
               Sự kiện & Hoạt động Chi đoàn
             </h1>
           </div>
@@ -201,14 +201,22 @@ export function EventsView() {
             Không có sự kiện nào phù hợp với tiêu chí tìm kiếm.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredEvents.map((evt) => (
-              <article
-                key={evt.id}
-                className="overflow-hidden rounded-3xl border border-white/10 bg-[#242428] flex flex-col justify-between transition-colors hover:border-white/25"
-              >
-                <div>
-                  <div className="relative aspect-[16/10] bg-[#171719]">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-7">
+            {filteredEvents.map((evt, evtIdx) => {
+              const isEditorialLead = evtIdx === 0 && filteredEvents.length >= 2;
+              return (
+                <article
+                  key={evt.id}
+                  className={`editorial-cream-sheet overflow-hidden rounded-3xl border border-white/10 bg-[#242428] flex flex-col justify-between transition-colors hover:border-white/25 ${
+                    isEditorialLead ? 'md:col-span-2 xl:col-span-2' : ''
+                  }`}
+                >
+                  <div>
+                    <div
+                      className={`editorial-photo-frame relative bg-[#171719] ${
+                        isEditorialLead ? 'aspect-[16/9] sm:aspect-[21/10]' : 'aspect-[16/10]'
+                      }`}
+                    >
                     <ResilientImage
                       src={evt.coverImage}
                       alt={evt.title}
@@ -292,7 +300,17 @@ export function EventsView() {
                       )}
                     </div>
 
-                    <h2 className="font-display text-xl font-semibold text-white line-clamp-2">{evt.title}</h2>
+                    <InlineEditableText
+                      as="h2"
+                      value={evt.title}
+                      canEdit={isAdmin}
+                      stopPropagation
+                      label="Tên sự kiện"
+                      onSave={(val) =>
+                        saveAndPublishEvent({ ...evt, title: val }, { syncToApp: true })
+                      }
+                      className="font-display text-xl font-semibold text-white line-clamp-2"
+                    />
 
                     <div className="space-y-1 text-xs text-zinc-400">
                       <div className="flex items-center gap-1.5">
@@ -301,16 +319,43 @@ export function EventsView() {
                           {evt.startTime} – {evt.endTime}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 truncate">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="truncate">{evt.location}</span>
+                        <div className="min-w-0 flex-1">
+                          <InlineEditableText
+                            as="span"
+                            value={evt.location || ''}
+                            emptyDisplay="Chưa cập nhật địa điểm"
+                            allowEmpty
+                            canEdit={isAdmin}
+                            stopPropagation
+                            label="Địa điểm tổ chức"
+                            onSave={(val) =>
+                              saveAndPublishEvent({ ...evt, location: val }, { syncToApp: true })
+                            }
+                            className="block truncate text-xs text-zinc-400"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <CollapsibleText
+                    <InlineEditableText
                       as="p"
-                      text={evt.summary || evt.intro}
+                      multiline
+                      collapsible
                       collapsedLines={2}
+                      allowEmpty
+                      stopPropagation
+                      value={evt.summary || evt.intro || ''}
+                      emptyDisplay="Chưa có mô tả sự kiện."
+                      canEdit={isAdmin}
+                      label={evt.summary ? 'Tóm tắt sự kiện' : 'Nội dung giới thiệu sự kiện'}
+                      onSave={(val) =>
+                        saveAndPublishEvent(
+                          evt.summary ? { ...evt, summary: val } : { ...evt, intro: val },
+                          { syncToApp: true }
+                        )
+                      }
                       className="text-xs text-zinc-300 leading-relaxed"
                     />
                   </div>
@@ -341,8 +386,9 @@ export function EventsView() {
                     </button>
                   </div>
                 </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )
       ) : (

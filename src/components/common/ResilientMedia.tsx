@@ -292,6 +292,7 @@ export function ResilientImage({
     viewerOpen && typeof document !== 'undefined'
       ? createPortal(
           <div
+            data-force-dark="true"
             className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-3 sm:p-6 backdrop-blur-md"
             role="dialog"
             aria-modal="true"

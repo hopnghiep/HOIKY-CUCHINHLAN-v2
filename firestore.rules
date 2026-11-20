@@ -106,12 +106,13 @@ service cloud.firestore {
         && (!('messagesLabel' in data.home) || isBoundedString(data.home.messagesLabel, 0, 200))
         && (!('messagesTitle' in data.home) || isBoundedString(data.home.messagesTitle, 0, 240))
         && data.home.hero is map
-        && data.home.hero.keys().hasOnly(['spaceLabel', 'title', 'unitIntro', 'subtitle', 'heroImage'])
+        && data.home.hero.keys().hasOnly(['spaceLabel', 'title', 'unitIntro', 'subtitle', 'heroImage', 'galleryPhotos'])
         && isBoundedString(data.home.hero.spaceLabel, 0, 200)
         && isBoundedString(data.home.hero.title, 1, 240)
         && isBoundedString(data.home.hero.unitIntro, 0, 400)
         && isBoundedString(data.home.hero.subtitle, 0, 2000)
         && isBoundedString(data.home.hero.heroImage, 0, 2048)
+        && (!('galleryPhotos' in data.home.hero) || isMapList(data.home.hero.galleryPhotos, 60))
         && data.home.history is map
         && data.home.history.keys().hasOnly([
           'sectionLabel', 'sectionTitle', 'foundingTitle', 'foundingContent',
@@ -145,8 +146,17 @@ service cloud.firestore {
         && isMapList(data.home.socialChannels, 30)
         && data.settings is map
         && data.settings.keys().hasAll(['themeMode', 'showSampleBanner', 'autoSaveEnabled', 'compactCards'])
-        && data.settings.keys().hasOnly(['themeMode', 'showSampleBanner', 'autoSaveEnabled', 'compactCards'])
-        && data.settings.themeMode in ['dark', 'neutral']
+        && data.settings.keys().hasOnly([
+          'themeMode', 'fontPreset', 'frameStyle',
+          'showSampleBanner', 'autoSaveEnabled', 'compactCards'
+        ])
+        && data.settings.themeMode in [
+          'corporate_blue', 'editorial_studio', 'dark', 'neutral', 'hht_50_gold', 'sunlit_campus', 'vintage_yearbook', 'youth_flame'
+        ]
+        && (!('fontPreset' in data.settings) || data.settings.fontPreset in [
+          'auto', 'corporate_inter', 'editorial_swiss', 'default', 'heritage_50', 'student_fresh', 'yearbook_art', 'youth_power'
+        ])
+        && (!('frameStyle' in data.settings) || data.settings.frameStyle in ['modern', 'yearbook'])
         && data.settings.showSampleBanner is bool
         && data.settings.autoSaveEnabled is bool
         && data.settings.compactCards is bool
@@ -173,14 +183,16 @@ service cloud.firestore {
 
     function isValidLeaderMessage(data) {
       return data.keys().hasAll(['id', 'title', 'authorName', 'authorRole', 'period', 'content', 'displayDate', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['id', 'title', 'authorName', 'authorRole', 'period', 'content', 'displayDate', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'authorName', 'authorRole', 'period', 'content', 'thumbnailImage', 'displayDate', 'orderIndex', 'dataOrigin', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
         && isValidId(data.id)
         && isBoundedString(data.title, 1, 240)
         && isBoundedString(data.authorName, 1, 160)
         && isBoundedString(data.authorRole, 0, 200)
         && isBoundedString(data.period, 0, 120)
         && isBoundedString(data.content, 1, 12000)
+        && (!('thumbnailImage' in data) || isBoundedString(data.thumbnailImage, 0, 2048))
         && isBoundedString(data.displayDate, 0, 40)
+        && (!('orderIndex' in data) || (data.orderIndex is number && data.orderIndex >= 0 && data.orderIndex <= 100000))
         && data.dataOrigin in ['sample', 'real']
         && data.visibility == 'public'
         && isValidId(data.createdBy)
@@ -405,7 +417,7 @@ service cloud.firestore {
 
     // 4. Historical Timeline Milestones (/milestones/{milestoneId})
     match /milestones/{milestoneId} {
-      allow get: if isSignedIn() && isValidId(milestoneId) && existing().visibility == 'public';
+      allow get: if isSignedIn() && isValidId(milestoneId) && (resource == null || existing().visibility == 'public');
       allow list: if isSignedIn() && resource.data.visibility == 'public';
 
       allow create: if isVerifiedUser()
@@ -434,7 +446,7 @@ service cloud.firestore {
 
     // 5. Leader Messages (/leaderMessages/{messageId})
     match /leaderMessages/{messageId} {
-      allow get: if isSignedIn() && isValidId(messageId) && existing().visibility == 'public';
+      allow get: if isSignedIn() && isValidId(messageId) && (resource == null || existing().visibility == 'public');
       allow list: if isSignedIn() && resource.data.visibility == 'public';
 
       allow create: if isVerifiedUser()
@@ -454,7 +466,7 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'title', 'authorName', 'authorRole', 'period', 'content', 'displayDate', 'dataOrigin', 'visibility', 'updatedAt'
+          'title', 'authorName', 'authorRole', 'period', 'content', 'thumbnailImage', 'displayDate', 'orderIndex', 'dataOrigin', 'visibility', 'updatedAt'
         ])
         && isAdmin();
 
@@ -463,7 +475,7 @@ service cloud.firestore {
 
     // 6. Cohorts / Generations (/cohorts/{cohortId})
     match /cohorts/{cohortId} {
-      allow get: if isSignedIn() && isValidId(cohortId) && existing().visibility == 'public';
+      allow get: if isSignedIn() && isValidId(cohortId) && (resource == null || existing().visibility == 'public');
       allow list: if isSignedIn() && resource.data.visibility == 'public';
 
       allow create: if isVerifiedUser()
@@ -493,7 +505,7 @@ service cloud.firestore {
 
     // 7. Public Member Profiles (/members/{memberId}) — PII Isolated in /private/contact
     match /members/{memberId} {
-      allow get: if isSignedIn() && isValidId(memberId) && existing().visibility == 'public';
+      allow get: if isSignedIn() && isValidId(memberId) && (resource == null || existing().visibility == 'public');
       allow list: if isSignedIn() && resource.data.visibility == 'public';
 
       allow create: if isVerifiedUser()
@@ -609,7 +621,7 @@ service cloud.firestore {
 
     // 8. School Events (/events/{eventId})
     match /events/{eventId} {
-      allow get: if isSignedIn() && isValidId(eventId) && existing().visibility == 'public';
+      allow get: if isSignedIn() && isValidId(eventId) && (resource == null || existing().visibility == 'public');
       allow list: if isSignedIn() && resource.data.visibility == 'public';
 
       allow create: if isVerifiedUser()

@@ -422,7 +422,9 @@ export const INITIAL_MEMOIR_DATA: MemoirDatabase = {
     },
   ],
   settings: {
-    themeMode: 'dark',
+    themeMode: 'corporate_blue',
+    fontPreset: 'corporate_inter',
+    frameStyle: 'modern',
     showSampleBanner: true,
     autoSaveEnabled: true,
     compactCards: false,

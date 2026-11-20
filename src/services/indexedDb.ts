@@ -153,6 +153,130 @@ export async function uploadOrEncodeMedia(
   return { url: dataUrl, mimeType: mime };
 }
 
+export async function compressImageFile(
+  file: File,
+  options?: { maxDimension?: number; quality?: number }
+): Promise<{ dataUrl: string; mimeType: string; fileName: string; originalBytes: number; compressedBytes: number }> {
+  const maxDimension = options?.maxDimension ?? 1600;
+  const quality = options?.quality ?? 0.82;
+  const originalDataUrl = await readFileAsDataUrl(file);
+
+  const compressed = await new Promise<{ dataUrl: string; mimeType: string }>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const naturalW = img.naturalWidth || img.width;
+        const naturalH = img.naturalHeight || img.height;
+        if (!naturalW || !naturalH) {
+          resolve({ dataUrl: originalDataUrl, mimeType: file.type || 'image/jpeg' });
+          return;
+        }
+
+        const scale = Math.min(1, maxDimension / Math.max(naturalW, naturalH));
+        const targetW = Math.max(1, Math.round(naturalW * scale));
+        const targetH = Math.max(1, Math.round(naturalH * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve({ dataUrl: originalDataUrl, mimeType: file.type || 'image/jpeg' });
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        // Prefer WebP for best compression & smooth slideshow rendering; fallback to JPEG
+        const webpUrl = canvas.toDataURL('image/webp', quality);
+        if (webpUrl.startsWith('data:image/webp')) {
+          resolve({ dataUrl: webpUrl, mimeType: 'image/webp' });
+          return;
+        }
+
+        const jpegUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve({ dataUrl: jpegUrl, mimeType: 'image/jpeg' });
+      } catch {
+        resolve({ dataUrl: originalDataUrl, mimeType: file.type || 'image/jpeg' });
+      }
+    };
+    img.onerror = () => resolve({ dataUrl: originalDataUrl, mimeType: file.type || 'image/jpeg' });
+    img.src = originalDataUrl;
+  });
+
+  // Keep whichever representation is smaller when dimensions didn't need shrinking
+  const useCompressed = compressed.dataUrl.length <= originalDataUrl.length || file.size > 350 * 1024;
+  const finalDataUrl = useCompressed ? compressed.dataUrl : originalDataUrl;
+  const finalMime = useCompressed ? compressed.mimeType : file.type || 'image/jpeg';
+  const ext = finalMime === 'image/webp' ? 'webp' : finalMime === 'image/png' ? 'png' : 'jpg';
+  const baseName = (file.name || 'slide').replace(/\.[^.]+$/, '');
+  const compressedBytes = Math.round(((finalDataUrl.split(',')[1] || '').length * 3) / 4);
+
+  return {
+    dataUrl: finalDataUrl,
+    mimeType: finalMime,
+    fileName: `${baseName}.${ext}`,
+    originalBytes: file.size,
+    compressedBytes,
+  };
+}
+
+export async function uploadCompressedImage(
+  file: File,
+  options?: { maxDimension?: number; quality?: number }
+): Promise<{ url: string; mimeType: string; originalBytes: number; compressedBytes: number }> {
+  const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  const mime = file.type.toLowerCase();
+  if (!validImageTypes.includes(mime)) {
+    throw new Error('Chỉ hỗ trợ định dạng ảnh JPG, JPEG, PNG hoặc WEBP.');
+  }
+
+  const compressed = await compressImageFile(file, options);
+
+  try {
+    const res = await fetch('/api/media/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAdminAuthHeaders() },
+      body: JSON.stringify({ dataUrl: compressed.dataUrl, fileName: compressed.fileName }),
+    });
+    if (res.ok) {
+      const json = (await res.json()) as { url: string; mimeType: string };
+      return {
+        url: json.url,
+        mimeType: json.mimeType || compressed.mimeType,
+        originalBytes: compressed.originalBytes,
+        compressedBytes: compressed.compressedBytes,
+      };
+    }
+
+    const memberRes = await fetch('/api/media/member-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl: compressed.dataUrl, fileName: compressed.fileName }),
+    });
+    if (memberRes.ok) {
+      const json = (await memberRes.json()) as { url: string; mimeType: string };
+      return {
+        url: json.url,
+        mimeType: json.mimeType || compressed.mimeType,
+        originalBytes: compressed.originalBytes,
+        compressedBytes: compressed.compressedBytes,
+      };
+    }
+  } catch {
+    // Fallback to compressed inline data URL when offline
+  }
+
+  return {
+    url: compressed.dataUrl,
+    mimeType: compressed.mimeType,
+    originalBytes: compressed.originalBytes,
+    compressedBytes: compressed.compressedBytes,
+  };
+}
+
 export async function uploadOrEncodeDocument(
   file: File
 ): Promise<{ url: string; mimeType: string; fileName: string; sizeBytes: number }> {

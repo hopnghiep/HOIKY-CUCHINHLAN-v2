@@ -51,7 +51,9 @@ export interface LeaderMessage {
   authorRole: string;
   period: string;
   content: string;
+  thumbnailImage?: string;
   createdAt: string;
+  orderIndex?: number;
   dataOrigin: DataOrigin;
 }
 
@@ -62,6 +64,13 @@ export interface SocialChannel {
   url: string;
 }
 
+export interface HeroGalleryPhoto {
+  id: string;
+  url: string;
+  caption: string;
+  addedAt: string;
+}
+
 export interface HomeMemoirData {
   hero: {
     spaceLabel: string;
@@ -69,6 +78,7 @@ export interface HomeMemoirData {
     unitIntro: string;
     subtitle: string;
     heroImage: string;
+    galleryPhotos?: HeroGalleryPhoto[];
   };
   history: {
     sectionLabel?: string;
@@ -226,8 +236,32 @@ export interface SchoolEvent {
   updatedAt: string;
 }
 
+export type ThemeMode =
+  | 'corporate_blue'
+  | 'editorial_studio'
+  | 'dark'
+  | 'neutral'
+  | 'hht_50_gold'
+  | 'sunlit_campus'
+  | 'vintage_yearbook'
+  | 'youth_flame';
+
+export type FontPreset =
+  | 'auto'
+  | 'corporate_inter'
+  | 'editorial_swiss'
+  | 'default'
+  | 'heritage_50'
+  | 'student_fresh'
+  | 'yearbook_art'
+  | 'youth_power';
+
+export type FrameStyle = 'modern' | 'yearbook';
+
 export interface AppSettings {
-  themeMode: 'dark' | 'neutral';
+  themeMode: ThemeMode;
+  fontPreset?: FontPreset;
+  frameStyle?: FrameStyle;
   showSampleBanner: boolean;
   autoSaveEnabled: boolean;
   compactCards: boolean;

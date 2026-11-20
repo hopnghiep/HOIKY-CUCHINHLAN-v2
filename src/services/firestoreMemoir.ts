@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { BOOTSTRAP_ADMIN_EMAIL, db } from '../firebase';
 import { INITIAL_MEMOIR_DATA, SCHEMA_VERSION } from '../data/initialData';
+import { normalizeFontPreset, normalizeFrameStyle, normalizeThemeMode } from '../constants/themes';
 import type {
   AppSettings,
   CohortItem,
@@ -51,6 +52,7 @@ export interface AdminRecordItem {
 }
 
 export interface FirestoreSyncTracker {
+  initialized: boolean;
   hasConfig: boolean;
   milestoneIds: Set<string>;
   messageIds: Set<string>;
@@ -62,6 +64,7 @@ export interface FirestoreSyncTracker {
 
 export function createEmptySyncTracker(): FirestoreSyncTracker {
   return {
+    initialized: false,
     hasConfig: false,
     milestoneIds: new Set(),
     messageIds: new Set(),
@@ -157,6 +160,15 @@ async function ensureRemoteMediaUrl(url: string | undefined, hintName = 'media')
 async function sanitizeHomeData(home: HomeMemoirData): Promise<Record<string, unknown>> {
   const heroImage = await ensureRemoteMediaUrl(home.hero.heroImage, 'hero');
   const anthemCover = await ensureRemoteMediaUrl(home.anthem.coverImage, 'anthem');
+  const rawHeroGallery = Array.isArray(home.hero.galleryPhotos) ? home.hero.galleryPhotos.slice(0, 60) : [];
+  const sanitizedHeroGallery = await Promise.all(
+    rawHeroGallery.map(async (photo, idx) => ({
+      id: sanitizeId(photo.id, `hgal_${idx}`),
+      url: clampStr(await ensureRemoteMediaUrl(photo.url, `hero_gallery_${idx}`), 2048),
+      caption: clampStr(photo.caption, 300),
+      addedAt: clampStr(photo.addedAt, 40),
+    }))
+  );
 
   const sanitizedHome: Record<string, unknown> = {
     hero: {
@@ -165,6 +177,7 @@ async function sanitizeHomeData(home: HomeMemoirData): Promise<Record<string, un
       unitIntro: clampStr(home.hero.unitIntro, 400),
       subtitle: clampStr(home.hero.subtitle, 2000),
       heroImage: clampStr(heroImage, 2048),
+      ...(sanitizedHeroGallery.length > 0 ? { galleryPhotos: sanitizedHeroGallery } : {}),
     },
     history: {
       ...(home.history.sectionLabel !== undefined ? { sectionLabel: clampStr(home.history.sectionLabel, 200) } : {}),
@@ -251,10 +264,12 @@ async function sanitizeHomeData(home: HomeMemoirData): Promise<Record<string, un
 
 function sanitizeSettings(settings: AppSettings): AppSettings {
   return {
-    themeMode: settings.themeMode === 'neutral' ? 'neutral' : 'dark',
-    showSampleBanner: Boolean(settings.showSampleBanner),
-    autoSaveEnabled: Boolean(settings.autoSaveEnabled),
-    compactCards: Boolean(settings.compactCards),
+    themeMode: normalizeThemeMode(settings?.themeMode),
+    fontPreset: normalizeFontPreset(settings?.fontPreset),
+    frameStyle: normalizeFrameStyle(settings?.frameStyle),
+    showSampleBanner: Boolean(settings?.showSampleBanner),
+    autoSaveEnabled: Boolean(settings?.autoSaveEnabled),
+    compactCards: Boolean(settings?.compactCards),
   };
 }
 
@@ -270,14 +285,17 @@ function buildMilestoneMutableFields(m: TimelineMilestone, index: number) {
   };
 }
 
-function buildMessageMutableFields(msg: LeaderMessage) {
+async function buildMessageMutableFields(msg: LeaderMessage, index: number) {
+  const thumbnailImage = await ensureRemoteMediaUrl(msg.thumbnailImage, `msg_${msg.id}`);
   return {
     title: clampStr(msg.title, 240, 'Lời ngỏ'),
     authorName: clampStr(msg.authorName, 160, 'Ban Chấp hành Chi đoàn'),
     authorRole: clampStr(msg.authorRole, 200),
     period: clampStr(msg.period, 120),
     content: clampStr(msg.content, 12000, 'Đang cập nhật nội dung.'),
+    thumbnailImage: clampStr(thumbnailImage, 2048),
     displayDate: clampStr(msg.createdAt, 40),
+    orderIndex: clampOrder(msg.orderIndex, index),
     dataOrigin: normalizeOrigin(msg.dataOrigin),
     visibility: 'public' as const,
     updatedAt: serverTimestamp(),
@@ -605,6 +623,8 @@ export function subscribeMemoirFirestore(
       return;
     }
 
+    tracker.initialized = true;
+
     if (!configDocData) {
       callbacks.onSnapshotData(INITIAL_MEMOIR_DATA, false);
       return;
@@ -631,7 +651,9 @@ export function subscribeMemoirFirestore(
       home: configDocData.home,
       settings: configDocData.settings,
       milestones: [...milestones].sort((a, b) => a.orderIndex - b.orderIndex),
-      leaderMessages: [...leaderMessages],
+      leaderMessages: [...leaderMessages].sort(
+        (a, b) => (a.orderIndex ?? Number.MAX_SAFE_INTEGER) - (b.orderIndex ?? Number.MAX_SAFE_INTEGER)
+      ),
       cohorts: [...cohorts].sort((a, b) => a.orderIndex - b.orderIndex),
       members: mergedMembers.sort((a, b) => a.orderIndex - b.orderIndex),
       events: [...events].sort((a, b) => b.date.localeCompare(a.date)),
@@ -761,7 +783,11 @@ export function subscribeMemoirFirestore(
             authorRole: String(data.authorRole || ''),
             period: String(data.period || ''),
             content: String(data.content || ''),
+            ...(typeof data.thumbnailImage === 'string' && data.thumbnailImage
+              ? { thumbnailImage: data.thumbnailImage }
+              : {}),
             createdAt: String(data.displayDate || toIsoString(data.createdAt).slice(0, 10)),
+            ...(typeof data.orderIndex === 'number' ? { orderIndex: data.orderIndex } : {}),
             dataOrigin: normalizeOrigin(data.dataOrigin),
           };
         });
@@ -927,21 +953,53 @@ export function subscribeMemoirFirestore(
 
 type BatchOp = (batch: ReturnType<typeof writeBatch>) => void;
 
-async function commitBatchedOps(ops: BatchOp[], pathHint: string): Promise<void> {
-  if (ops.length === 0) return;
-  const CHUNK_SIZE = 400;
-  for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
-    const chunk = ops.slice(i, i + CHUNK_SIZE);
+interface BatchGroup {
+  ops: BatchOp[];
+  paths: string[];
+}
+
+async function checkDocExists(ref: ReturnType<typeof doc>): Promise<boolean> {
+  try {
+    const snap = await getDoc(ref);
+    return snap.exists();
+  } catch {
+    return false;
+  }
+}
+
+async function commitBatchedGroups(groups: BatchGroup[], pathHint: string): Promise<void> {
+  if (groups.length === 0) return;
+  const CHUNK_LIMIT = 400;
+  let currentOps: BatchOp[] = [];
+  let currentPaths: string[] = [];
+
+  const flushChunk = async () => {
+    if (currentOps.length === 0) return;
     const batch = writeBatch(db);
-    for (const op of chunk) {
+    for (const op of currentOps) {
       op(batch);
     }
+    const detailPath =
+      currentPaths.length > 0
+        ? `${pathHint}:${currentPaths.slice(0, 6).join(',')}${currentPaths.length > 6 ? `(+${currentPaths.length - 6})` : ''}`
+        : pathHint;
     try {
       await batch.commit();
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, pathHint);
+      handleFirestoreError(error, OperationType.WRITE, detailPath);
     }
+    currentOps = [];
+    currentPaths = [];
+  };
+
+  for (const group of groups) {
+    if (currentOps.length > 0 && currentOps.length + group.ops.length > CHUNK_LIMIT) {
+      await flushChunk();
+    }
+    currentOps.push(...group.ops);
+    currentPaths.push(...group.paths);
   }
+  await flushChunk();
 }
 
 export async function syncFullMemoirToFirestore(
@@ -951,7 +1009,8 @@ export async function syncFullMemoirToFirestore(
   tracker: FirestoreSyncTracker,
   forceFullWrite = false
 ): Promise<void> {
-  const ops: BatchOp[] = [];
+  const groups: BatchGroup[] = [];
+  const pendingTrackerUpdates: Array<() => void> = [];
 
   // 1. memoirConfig/main
   const configChanged =
@@ -974,12 +1033,14 @@ export async function syncFullMemoirToFirestore(
       updatedAt: serverTimestamp(),
     };
     const ref = doc(db, 'memoirConfig', 'main');
-    if (tracker.hasConfig) {
-      ops.push((b) => b.update(ref, configPayload));
-    } else {
-      ops.push((b) => b.set(ref, configPayload));
+    // memoirConfig/main has no immutable createdAt/createdBy; set() cleanly handles both create and update
+    groups.push({
+      ops: [(b) => b.set(ref, configPayload)],
+      paths: ['memoirConfig/main'],
+    });
+    pendingTrackerUpdates.push(() => {
       tracker.hasConfig = true;
-    }
+    });
   }
 
   // 2. milestones
@@ -990,28 +1051,50 @@ export async function syncFullMemoirToFirestore(
     const docId = sanitizeId(m.id, `ms_${idx}`);
     nextMilestoneIds.add(docId);
     const prev = prevMilestonesMap.get(m.id);
-    if (forceFullWrite || !tracker.milestoneIds.has(docId) || !prev || JSON.stringify(prev) !== JSON.stringify(m)) {
+    const shouldWrite =
+      forceFullWrite ||
+      (tracker.initialized && !tracker.milestoneIds.has(docId)) ||
+      !prev ||
+      JSON.stringify(prev) !== JSON.stringify(m);
+    if (shouldWrite) {
       const ref = doc(db, 'milestones', docId);
       const mutable = buildMilestoneMutableFields(m, idx);
-      if (tracker.milestoneIds.has(docId)) {
-        ops.push((b) => b.update(ref, mutable));
+      const existsInCloud = tracker.milestoneIds.has(docId) ? true : await checkDocExists(ref);
+      if (existsInCloud) {
+        groups.push({
+          ops: [(b) => b.update(ref, mutable)],
+          paths: [`milestones/${docId}`],
+        });
       } else {
-        ops.push((b) =>
-          b.set(ref, {
-            id: docId,
-            ...mutable,
-            createdBy: uid,
-            createdAt: serverTimestamp(),
-          })
-        );
-        tracker.milestoneIds.add(docId);
+        groups.push({
+          ops: [
+            (b) =>
+              b.set(ref, {
+                id: docId,
+                ...mutable,
+                createdBy: uid,
+                createdAt: serverTimestamp(),
+              }),
+          ],
+          paths: [`milestones/${docId}`],
+        });
       }
+      pendingTrackerUpdates.push(() => {
+        tracker.milestoneIds.add(docId);
+      });
     }
   }
-  for (const existingId of Array.from(tracker.milestoneIds)) {
-    if (!nextMilestoneIds.has(existingId)) {
-      ops.push((b) => b.delete(doc(db, 'milestones', existingId)));
-      tracker.milestoneIds.delete(existingId);
+  if (tracker.initialized) {
+    for (const existingId of Array.from(tracker.milestoneIds)) {
+      if (!nextMilestoneIds.has(existingId)) {
+        groups.push({
+          ops: [(b) => b.delete(doc(db, 'milestones', existingId))],
+          paths: [`milestones/${existingId}`],
+        });
+        pendingTrackerUpdates.push(() => {
+          tracker.milestoneIds.delete(existingId);
+        });
+      }
     }
   }
 
@@ -1023,28 +1106,50 @@ export async function syncFullMemoirToFirestore(
     const docId = sanitizeId(msg.id, `msg_${idx}`);
     nextMessageIds.add(docId);
     const prev = prevMessagesMap.get(msg.id);
-    if (forceFullWrite || !tracker.messageIds.has(docId) || !prev || JSON.stringify(prev) !== JSON.stringify(msg)) {
+    const shouldWrite =
+      forceFullWrite ||
+      (tracker.initialized && !tracker.messageIds.has(docId)) ||
+      !prev ||
+      JSON.stringify(prev) !== JSON.stringify(msg);
+    if (shouldWrite) {
       const ref = doc(db, 'leaderMessages', docId);
-      const mutable = buildMessageMutableFields(msg);
-      if (tracker.messageIds.has(docId)) {
-        ops.push((b) => b.update(ref, mutable));
+      const mutable = await buildMessageMutableFields(msg, idx);
+      const existsInCloud = tracker.messageIds.has(docId) ? true : await checkDocExists(ref);
+      if (existsInCloud) {
+        groups.push({
+          ops: [(b) => b.update(ref, mutable)],
+          paths: [`leaderMessages/${docId}`],
+        });
       } else {
-        ops.push((b) =>
-          b.set(ref, {
-            id: docId,
-            ...mutable,
-            createdBy: uid,
-            createdAt: serverTimestamp(),
-          })
-        );
-        tracker.messageIds.add(docId);
+        groups.push({
+          ops: [
+            (b) =>
+              b.set(ref, {
+                id: docId,
+                ...mutable,
+                createdBy: uid,
+                createdAt: serverTimestamp(),
+              }),
+          ],
+          paths: [`leaderMessages/${docId}`],
+        });
       }
+      pendingTrackerUpdates.push(() => {
+        tracker.messageIds.add(docId);
+      });
     }
   }
-  for (const existingId of Array.from(tracker.messageIds)) {
-    if (!nextMessageIds.has(existingId)) {
-      ops.push((b) => b.delete(doc(db, 'leaderMessages', existingId)));
-      tracker.messageIds.delete(existingId);
+  if (tracker.initialized) {
+    for (const existingId of Array.from(tracker.messageIds)) {
+      if (!nextMessageIds.has(existingId)) {
+        groups.push({
+          ops: [(b) => b.delete(doc(db, 'leaderMessages', existingId))],
+          paths: [`leaderMessages/${existingId}`],
+        });
+        pendingTrackerUpdates.push(() => {
+          tracker.messageIds.delete(existingId);
+        });
+      }
     }
   }
 
@@ -1057,32 +1162,54 @@ export async function syncFullMemoirToFirestore(
     const docId = sanitizeId(c.id, `cohort_${idx}`);
     nextCohortIds.add(docId);
     const prev = prevCohortsMap.get(c.id);
-    if (forceFullWrite || !tracker.cohortIds.has(docId) || !prev || JSON.stringify(prev) !== JSON.stringify(c)) {
+    const shouldWrite =
+      forceFullWrite ||
+      (tracker.initialized && !tracker.cohortIds.has(docId)) ||
+      !prev ||
+      JSON.stringify(prev) !== JSON.stringify(c);
+    if (shouldWrite) {
       const ref = doc(db, 'cohorts', docId);
       const mutable = buildCohortMutableFields(c, idx);
-      if (tracker.cohortIds.has(docId)) {
-        ops.push((b) => b.update(ref, mutable));
+      const existsInCloud = tracker.cohortIds.has(docId) ? true : await checkDocExists(ref);
+      if (existsInCloud) {
+        groups.push({
+          ops: [(b) => b.update(ref, mutable)],
+          paths: [`cohorts/${docId}`],
+        });
       } else {
-        ops.push((b) =>
-          b.set(ref, {
-            id: docId,
-            ...mutable,
-            createdBy: uid,
-            createdAt: serverTimestamp(),
-          })
-        );
+        groups.push({
+          ops: [
+            (b) =>
+              b.set(ref, {
+                id: docId,
+                ...mutable,
+                createdBy: uid,
+                createdAt: serverTimestamp(),
+              }),
+          ],
+          paths: [`cohorts/${docId}`],
+        });
+      }
+      pendingTrackerUpdates.push(() => {
         tracker.cohortIds.add(docId);
+      });
+    }
+  }
+  if (tracker.initialized) {
+    for (const existingId of Array.from(tracker.cohortIds)) {
+      if (!nextCohortIds.has(existingId)) {
+        groups.push({
+          ops: [(b) => b.delete(doc(db, 'cohorts', existingId))],
+          paths: [`cohorts/${existingId}`],
+        });
+        pendingTrackerUpdates.push(() => {
+          tracker.cohortIds.delete(existingId);
+        });
       }
     }
   }
-  for (const existingId of Array.from(tracker.cohortIds)) {
-    if (!nextCohortIds.has(existingId)) {
-      ops.push((b) => b.delete(doc(db, 'cohorts', existingId)));
-      tracker.cohortIds.delete(existingId);
-    }
-  }
 
-  // 5. members + private/contact (Split Collection PII Isolation)
+  // 5. members + private/contact (Split Collection PII Isolation — kept atomic in same batch group)
   const prevMembersMap = new Map((prevDb?.members || []).map((m) => [m.id, m]));
   const nextMemberIds = new Set<string>();
   for (let idx = 0; idx < nextDb.members.length; idx++) {
@@ -1090,16 +1217,30 @@ export async function syncFullMemoirToFirestore(
     const docId = sanitizeId(m.id, `mem_${idx}`);
     nextMemberIds.add(docId);
     const prev = prevMembersMap.get(m.id);
-    if (forceFullWrite || !tracker.memberIds.has(docId) || !prev || JSON.stringify(prev) !== JSON.stringify(m)) {
+    const shouldWrite =
+      forceFullWrite ||
+      (tracker.initialized && !tracker.memberIds.has(docId)) ||
+      !prev ||
+      JSON.stringify(prev) !== JSON.stringify(m);
+    if (shouldWrite) {
       const memberRef = doc(db, 'members', docId);
       const contactRef = doc(db, 'members', docId, 'private', 'contact');
-      const publicFields = await buildMemberPublicFields(m, idx);
+      const [publicFields, memberExistsInCloud] = await Promise.all([
+        buildMemberPublicFields(m, idx),
+        tracker.memberIds.has(docId) ? Promise.resolve(true) : checkDocExists(memberRef),
+      ]);
+      const contactExistsInCloud = tracker.memberContactIds.has(docId)
+        ? true
+        : memberExistsInCloud
+          ? await checkDocExists(contactRef)
+          : false;
       const contactPayload = buildMemberPrivateContactPayload(docId, m);
 
-      if (tracker.memberIds.has(docId)) {
-        ops.push((b) => b.update(memberRef, publicFields));
+      const memberOps: BatchOp[] = [];
+      if (memberExistsInCloud) {
+        memberOps.push((b) => b.update(memberRef, publicFields));
       } else {
-        ops.push((b) =>
+        memberOps.push((b) =>
           b.set(memberRef, {
             id: docId,
             ...publicFields,
@@ -1107,26 +1248,46 @@ export async function syncFullMemoirToFirestore(
             createdAt: serverTimestamp(),
           })
         );
-        tracker.memberIds.add(docId);
       }
 
-      if (tracker.memberContactIds.has(docId)) {
+      if (contactExistsInCloud) {
         const { memberId: _ignore, ...mutableContact } = contactPayload;
-        ops.push((b) => b.update(contactRef, mutableContact));
+        memberOps.push((b) => b.update(contactRef, mutableContact));
       } else {
-        ops.push((b) => b.set(contactRef, contactPayload));
-        tracker.memberContactIds.add(docId);
+        memberOps.push((b) => b.set(contactRef, contactPayload));
       }
+
+      groups.push({
+        ops: memberOps,
+        paths: [`members/${docId}`, `members/${docId}/private/contact`],
+      });
+      pendingTrackerUpdates.push(() => {
+        tracker.memberIds.add(docId);
+        tracker.memberContactIds.add(docId);
+      });
     }
   }
-  for (const existingId of Array.from(tracker.memberIds)) {
-    if (!nextMemberIds.has(existingId)) {
-      if (tracker.memberContactIds.has(existingId)) {
-        ops.push((b) => b.delete(doc(db, 'members', existingId, 'private', 'contact')));
-        tracker.memberContactIds.delete(existingId);
+  if (tracker.initialized) {
+    for (const existingId of Array.from(tracker.memberIds)) {
+      if (!nextMemberIds.has(existingId)) {
+        const deleteOps: BatchOp[] = [];
+        const deletePaths: string[] = [];
+        const contactRef = doc(db, 'members', existingId, 'private', 'contact');
+        const contactExists = tracker.memberContactIds.has(existingId)
+          ? true
+          : await checkDocExists(contactRef);
+        if (contactExists) {
+          deleteOps.push((b) => b.delete(contactRef));
+          deletePaths.push(`members/${existingId}/private/contact`);
+        }
+        deleteOps.push((b) => b.delete(doc(db, 'members', existingId)));
+        deletePaths.push(`members/${existingId}`);
+        groups.push({ ops: deleteOps, paths: deletePaths });
+        pendingTrackerUpdates.push(() => {
+          tracker.memberContactIds.delete(existingId);
+          tracker.memberIds.delete(existingId);
+        });
       }
-      ops.push((b) => b.delete(doc(db, 'members', existingId)));
-      tracker.memberIds.delete(existingId);
     }
   }
 
@@ -1138,32 +1299,59 @@ export async function syncFullMemoirToFirestore(
     const docId = sanitizeId(evt.id, `evt_${idx}`);
     nextEventIds.add(docId);
     const prev = prevEventsMap.get(evt.id);
-    if (forceFullWrite || !tracker.eventIds.has(docId) || !prev || JSON.stringify(prev) !== JSON.stringify(evt)) {
+    const shouldWrite =
+      forceFullWrite ||
+      (tracker.initialized && !tracker.eventIds.has(docId)) ||
+      !prev ||
+      JSON.stringify(prev) !== JSON.stringify(evt);
+    if (shouldWrite) {
       const ref = doc(db, 'events', docId);
-      const mutable = await buildEventMutableFields(evt);
-      if (tracker.eventIds.has(docId)) {
-        ops.push((b) => b.update(ref, mutable));
+      const [mutable, existsInCloud] = await Promise.all([
+        buildEventMutableFields(evt),
+        tracker.eventIds.has(docId) ? Promise.resolve(true) : checkDocExists(ref),
+      ]);
+      if (existsInCloud) {
+        groups.push({
+          ops: [(b) => b.update(ref, mutable)],
+          paths: [`events/${docId}`],
+        });
       } else {
-        ops.push((b) =>
-          b.set(ref, {
-            id: docId,
-            ...mutable,
-            createdBy: uid,
-            createdAt: serverTimestamp(),
-          })
-        );
+        groups.push({
+          ops: [
+            (b) =>
+              b.set(ref, {
+                id: docId,
+                ...mutable,
+                createdBy: uid,
+                createdAt: serverTimestamp(),
+              }),
+          ],
+          paths: [`events/${docId}`],
+        });
+      }
+      pendingTrackerUpdates.push(() => {
         tracker.eventIds.add(docId);
+      });
+    }
+  }
+  if (tracker.initialized) {
+    for (const existingId of Array.from(tracker.eventIds)) {
+      if (!nextEventIds.has(existingId)) {
+        groups.push({
+          ops: [(b) => b.delete(doc(db, 'events', existingId))],
+          paths: [`events/${existingId}`],
+        });
+        pendingTrackerUpdates.push(() => {
+          tracker.eventIds.delete(existingId);
+        });
       }
     }
   }
-  for (const existingId of Array.from(tracker.eventIds)) {
-    if (!nextEventIds.has(existingId)) {
-      ops.push((b) => b.delete(doc(db, 'events', existingId)));
-      tracker.eventIds.delete(existingId);
-    }
-  }
 
-  await commitBatchedOps(ops, 'memoir_batch_sync');
+  await commitBatchedGroups(groups, 'memoir_batch_sync');
+  for (const applyUpdate of pendingTrackerUpdates) {
+    applyUpdate();
+  }
 }
 
 /**
@@ -1179,7 +1367,7 @@ export async function saveSelfMemberToFirestore(
   const docId = sanitizeId(member.id, 'mem');
   const memberRef = doc(db, 'members', docId);
   const contactRef = doc(db, 'members', docId, 'private', 'contact');
-  const isExisting = tracker.memberIds.has(docId);
+  const isExisting = tracker.memberIds.has(docId) ? true : await checkDocExists(memberRef);
 
   const normalizedMember: MemberProfile = {
     ...member,
@@ -1212,7 +1400,11 @@ export async function saveSelfMemberToFirestore(
     });
   }
 
-  const hasContact = tracker.memberContactIds.has(docId);
+  const hasContact = tracker.memberContactIds.has(docId)
+    ? true
+    : isExisting
+      ? await checkDocExists(contactRef)
+      : false;
   if (hasContact) {
     if (isAdminUser) {
       const { memberId: _m, ...adminContactFields } = contactPayload;
