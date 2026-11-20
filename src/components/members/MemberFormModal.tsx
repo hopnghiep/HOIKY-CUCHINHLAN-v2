@@ -9,6 +9,7 @@ interface MemberFormModalProps {
   isOpen: boolean;
   initialMember: MemberProfile | null;
   defaultCohortId?: string;
+  defaultGroup?: MemberGroup;
   onClose: () => void;
   onSave: (member: MemberProfile, publishImmediately?: boolean) => void;
 }
@@ -17,6 +18,7 @@ export function MemberFormModal({
   isOpen,
   initialMember,
   defaultCohortId,
+  defaultGroup = 'member',
   onClose,
   onSave,
 }: MemberFormModalProps) {
@@ -84,7 +86,7 @@ export function MemberFormModal({
       setOwnerUid(initialMember.ownerUid || '');
     } else {
       const initialCohort = sortedCohorts.find((c) => c.id === defaultCohortId);
-      setGroup('member');
+      setGroup(defaultGroup);
       setCohortId(initialCohort?.id || '');
       setFullName('');
       setCohortLabel(initialCohort?.name || 'Niên khóa');
@@ -107,7 +109,7 @@ export function MemberFormModal({
       setViber('');
       setOwnerUid('');
     }
-  }, [defaultCohortId, initialMember, isOpen, sortedCohorts]);
+  }, [defaultCohortId, defaultGroup, initialMember, isOpen, sortedCohorts]);
 
   if (!isOpen) return null;
 
@@ -159,6 +161,8 @@ export function MemberFormModal({
       achievements,
       activityPhotos: initialMember?.activityPhotos || [],
       articles: initialMember?.articles || [],
+      youtubeVideos: initialMember?.youtubeVideos || [],
+      documents: initialMember?.documents || [],
       socials: {
         facebook: facebook.trim() || undefined,
         website: website.trim() || undefined,
@@ -374,7 +378,16 @@ export function MemberFormModal({
                 </label>
               </div>
               <div className="aspect-square max-h-40 mx-auto overflow-hidden rounded-xl border border-white/10 bg-[#171719]">
-                <ResilientImage src={youthPhoto} alt="Ảnh thời trẻ" className="h-full w-full object-cover" />
+                <ResilientImage
+                  src={youthPhoto}
+                  alt="Ảnh thời trẻ"
+                  downloadFileName={`${fullName || 'thanh-vien'}-thoi-tre`}
+                  viewerSubtitle="Ảnh chân dung thời trẻ"
+                  canEdit
+                  onChangeImage={(nextUrl) => setYouthPhoto(nextUrl)}
+                  onDeleteImage={() => setYouthPhoto('')}
+                  className="h-full w-full object-cover"
+                />
               </div>
               <input
                 type="text"
@@ -407,7 +420,16 @@ export function MemberFormModal({
                 </label>
               </div>
               <div className="aspect-square max-h-40 mx-auto overflow-hidden rounded-xl border border-white/10 bg-[#171719]">
-                <ResilientImage src={presentPhoto} alt="Ảnh hiện tại" className="h-full w-full object-cover" />
+                <ResilientImage
+                  src={presentPhoto}
+                  alt="Ảnh hiện tại"
+                  downloadFileName={`${fullName || 'thanh-vien'}-hien-tai`}
+                  viewerSubtitle="Ảnh chân dung hiện tại"
+                  canEdit
+                  onChangeImage={(nextUrl) => setPresentPhoto(nextUrl)}
+                  onDeleteImage={() => setPresentPhoto('')}
+                  className="h-full w-full object-cover"
+                />
               </div>
               <input
                 type="text"

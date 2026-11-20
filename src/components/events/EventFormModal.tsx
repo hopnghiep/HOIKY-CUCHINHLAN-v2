@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Film, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { Film, Plus, RefreshCw, Save, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import type { EventCategory, EventPhoto, EventVideo, SchoolEvent } from '../../types/memoir';
 import { useMemoir } from '../../context/MemoirContext';
 import { uploadOrEncodeMedia } from '../../services/indexedDb';
@@ -20,12 +20,13 @@ interface EventFormModalProps {
   isOpen: boolean;
   initialEvent: SchoolEvent | null;
   onClose: () => void;
-  onSave: (evt: SchoolEvent) => void;
+  onSave?: (evt: SchoolEvent, options?: { syncToApp?: boolean }) => void | Promise<boolean | void>;
 }
 
 export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventFormModalProps) {
-  const { data, aiConfigured, notify } = useMemoir();
+  const { data, aiConfigured, isSaving, saveAndPublishEvent, notify } = useMemoir();
 
+  const [draftEventId, setDraftEventId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<EventCategory>('Phong trào');
   const [date, setDate] = useState('');
@@ -47,6 +48,7 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
   useEffect(() => {
     if (!isOpen) return;
     if (initialEvent) {
+      setDraftEventId(initialEvent.id);
       setTitle(initialEvent.title);
       setCategory(initialEvent.category);
       setDate(initialEvent.date);
@@ -62,6 +64,7 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
       setVideos(initialEvent.videos);
       setParticipantMemberIds(initialEvent.participantMemberIds);
     } else {
+      setDraftEventId(`evt_${Date.now()}`);
       setTitle('');
       setCategory('Phong trào');
       setDate(new Date().toISOString().slice(0, 10));
@@ -179,14 +182,17 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const buildEventPayload = (): SchoolEvent | null => {
     if (!title.trim() || !date) {
       notify('Vui lòng nhập tên và ngày tổ chức sự kiện.', 'error');
-      return;
+      return null;
     }
-    const nextEvent: SchoolEvent = {
-      id: initialEvent?.id || `evt_${Date.now()}`,
+    const id = draftEventId || initialEvent?.id || `evt_${Date.now()}`;
+    if (!draftEventId) {
+      setDraftEventId(id);
+    }
+    return {
+      id,
       title: title.trim(),
       category,
       date,
@@ -204,8 +210,28 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
       dataOrigin: 'real',
       updatedAt: new Date().toISOString(),
     };
-    onSave(nextEvent);
-    onClose();
+  };
+
+  const handleSaveDraft = async () => {
+    const nextEvent = buildEventPayload();
+    if (!nextEvent) return;
+    if (onSave) {
+      await onSave(nextEvent, { syncToApp: false });
+    } else {
+      await saveAndPublishEvent(nextEvent, { syncToApp: false });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextEvent = buildEventPayload();
+    if (!nextEvent) return;
+    const result = onSave
+      ? await onSave(nextEvent, { syncToApp: true })
+      : await saveAndPublishEvent(nextEvent, { syncToApp: true });
+    if (result !== false) {
+      onClose();
+    }
   };
 
   return (
@@ -372,7 +398,16 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
                 </label>
               </div>
               <div className="aspect-[16/9] overflow-hidden rounded-xl border border-white/10 bg-[#171719]">
-                <ResilientImage src={coverImage} alt="Ảnh bìa sự kiện" className="h-full w-full object-cover" />
+                <ResilientImage
+                  src={coverImage}
+                  alt="Ảnh bìa sự kiện"
+                  downloadFileName={`su-kien-${title || 'anh-bia'}`}
+                  viewerSubtitle="Ảnh đại diện sự kiện"
+                  canEdit
+                  onChangeImage={(nextUrl) => setCoverImage(nextUrl)}
+                  onDeleteImage={() => setCoverImage('')}
+                  className="h-full w-full object-cover"
+                />
               </div>
               <input
                 type="text"
@@ -423,7 +458,20 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
                 <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto pt-1">
                   {photos.map((p) => (
                     <div key={p.id} className="relative aspect-[4/3] overflow-hidden rounded-lg border border-white/10">
-                      <ResilientImage src={p.url} alt={p.caption} className="h-full w-full object-cover" />
+                      <ResilientImage
+                        src={p.url}
+                        alt={p.caption || 'Ảnh album'}
+                        downloadFileName={`${title || 'su-kien'}-${p.caption || p.id}`}
+                        viewerSubtitle={`Album: ${p.albumName || 'Chung'}`}
+                        canEdit
+                        onChangeImage={(nextUrl) =>
+                          setPhotos((prev) =>
+                            prev.map((item) => (item.id === p.id ? { ...item, url: nextUrl } : item))
+                          )
+                        }
+                        onDeleteImage={() => setPhotos((prev) => prev.filter((item) => item.id !== p.id))}
+                        className="h-full w-full object-cover"
+                      />
                       <button
                         type="button"
                         onClick={() => setPhotos((prev) => prev.filter((item) => item.id !== p.id))}
@@ -493,7 +541,7 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-4 border-t border-white/10">
             <button
               type="button"
               onClick={onClose}
@@ -502,10 +550,21 @@ export function EventFormModal({ isOpen, initialEvent, onClose, onSave }: EventF
               Hủy
             </button>
             <button
-              type="submit"
-              className="rounded-xl bg-[#F02028] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer"
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSaving || uploading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#242428] px-4 py-2.5 text-xs font-semibold text-white hover:border-[#F02028] hover:bg-white/10 disabled:opacity-50 cursor-pointer"
             >
-              {initialEvent ? 'Lưu thay đổi sự kiện' : 'Tạo sự kiện mới'}
+              <Save className="w-3.5 h-3.5 text-[#F02028]" />
+              <span>Lưu</span>
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || uploading}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#F02028] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#d91b23] disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSaving ? 'animate-spin' : ''}`} />
+              <span>{isSaving ? 'Đang lưu & cập nhật...' : 'Lưu & Cập nhật'}</span>
             </button>
           </div>
         </form>

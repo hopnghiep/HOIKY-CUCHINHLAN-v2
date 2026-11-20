@@ -226,8 +226,8 @@ service cloud.firestore {
           'id', 'group', 'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
           'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
           'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
-          'socials', 'favoriteQuote', 'orderIndex', 'dataOrigin', 'visibility',
-          'ownerUid', 'createdBy', 'createdAt', 'updatedAt'
+          'youtubeVideos', 'documents', 'socials', 'favoriteQuote', 'orderIndex',
+          'dataOrigin', 'visibility', 'ownerUid', 'createdBy', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.id)
         && data.group in ['member', 'guest_advisor']
@@ -246,6 +246,8 @@ service cloud.firestore {
         && isStringList(data.achievements, 50, 500)
         && isMapList(data.activityPhotos, 60)
         && isMapList(data.articles, 50)
+        && (!('youtubeVideos' in data) || isMapList(data.youtubeVideos, 30))
+        && (!('documents' in data) || isMapList(data.documents, 50))
         && isValidMemberSocials(data.socials)
         && isBoundedString(data.favoriteQuote, 0, 600)
         && data.orderIndex is number
@@ -524,8 +526,8 @@ service cloud.firestore {
               'group', 'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
               'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
               'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
-              'socials', 'favoriteQuote', 'orderIndex', 'dataOrigin', 'visibility',
-              'ownerUid', 'updatedAt'
+              'youtubeVideos', 'documents', 'socials', 'favoriteQuote', 'orderIndex',
+              'dataOrigin', 'visibility', 'ownerUid', 'updatedAt'
             ])
           ) ||
           // Tier 2: Profile Owner self-service content update (cannot change group, orderIndex, ownerUid, visibility)
@@ -539,7 +541,7 @@ service cloud.firestore {
               'cohortId', 'fullName', 'youthPhoto', 'presentPhoto',
               'cohortLabel', 'presentLabel', 'role', 'occupation', 'field', 'joinDate',
               'biography', 'selfIntro', 'achievements', 'activityPhotos', 'articles',
-              'socials', 'favoriteQuote', 'dataOrigin', 'updatedAt'
+              'youtubeVideos', 'documents', 'socials', 'favoriteQuote', 'dataOrigin', 'updatedAt'
             ])
           )
         );
@@ -552,10 +554,12 @@ service cloud.firestore {
         allow get: if isSignedIn()
           && isValidId(memberId)
           && docId == 'contact'
-          && exists(/databases/$(database)/documents/members/$(memberId))
           && (
             isAdmin()
-            || get(/databases/$(database)/documents/members/$(memberId)).data.ownerUid == request.auth.uid
+            || (
+              exists(/databases/$(database)/documents/members/$(memberId))
+              && get(/databases/$(database)/documents/members/$(memberId)).data.ownerUid == request.auth.uid
+            )
           );
 
         allow list: if false;

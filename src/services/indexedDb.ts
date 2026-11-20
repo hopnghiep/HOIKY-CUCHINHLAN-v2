@@ -152,3 +152,51 @@ export async function uploadOrEncodeMedia(
 
   return { url: dataUrl, mimeType: mime };
 }
+
+export async function uploadOrEncodeDocument(
+  file: File
+): Promise<{ url: string; mimeType: string; fileName: string; sizeBytes: number }> {
+  const maxBytes = 20 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new Error('Dung lượng tài liệu vượt quá giới hạn 20MB.');
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  const mimeType = file.type || 'application/octet-stream';
+
+  try {
+    const res = await fetch('/api/media/member-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, fileName: file.name, mimeType }),
+    });
+    if (res.ok) {
+      const json = (await res.json()) as {
+        url: string;
+        mimeType?: string;
+        fileName?: string;
+        sizeBytes?: number;
+      };
+      return {
+        url: json.url,
+        mimeType: json.mimeType || mimeType,
+        fileName: json.fileName || file.name,
+        sizeBytes: json.sizeBytes ?? file.size,
+      };
+    }
+    const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+    if (res.status >= 400 && res.status < 500 && errJson.error) {
+      throw new Error(errJson.error);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message && !err.message.includes('Failed to fetch')) {
+      throw err;
+    }
+  }
+
+  // Offline fallback for small files
+  if (file.size > 4 * 1024 * 1024) {
+    throw new Error('Không thể tải tài liệu lớn lên máy chủ khi ngoại tuyến.');
+  }
+  return { url: dataUrl, mimeType, fileName: file.name, sizeBytes: file.size };
+}

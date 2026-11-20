@@ -14,6 +14,7 @@ import {
   Music,
   Plus,
   RotateCcw,
+  Save,
   Share2,
   Trash2,
   Upload,
@@ -46,10 +47,12 @@ export function AdminConsoleView() {
   const {
     data,
     isAdmin,
+    isSaving,
     adminName,
     lastSavedAt,
     backups,
     updateData,
+    saveAndPublishEvent,
     restoreFromPackage,
     restoreFromSnapshot,
     clearSampleData,
@@ -538,7 +541,40 @@ export function AdminConsoleView() {
                 </label>
               </div>
               <div className="aspect-[16/10] overflow-hidden rounded-xl border border-white/10">
-                <ResilientImage src={data.home.hero.heroImage} alt="Hero banner" className="h-full w-full object-cover" />
+                <ResilientImage
+                  src={data.home.hero.heroImage}
+                  alt="Ảnh bìa Trang chủ"
+                  downloadFileName="anh-bia-trang-chu"
+                  viewerSubtitle="Ảnh bìa Trang chủ"
+                  canEdit
+                  onChangeImage={(nextUrl) =>
+                    updateData(
+                      (prev) => ({
+                        ...prev,
+                        home: {
+                          ...prev.home,
+                          dataOrigin: 'real',
+                          hero: { ...prev.home.hero, heroImage: nextUrl },
+                        },
+                      }),
+                      'Đã lưu ảnh bìa Trang chủ.'
+                    )
+                  }
+                  onDeleteImage={() =>
+                    updateData(
+                      (prev) => ({
+                        ...prev,
+                        home: {
+                          ...prev.home,
+                          dataOrigin: 'real',
+                          hero: { ...prev.home.hero, heroImage: '' },
+                        },
+                      }),
+                      'Đã xóa ảnh bìa Trang chủ.'
+                    )
+                  }
+                  className="h-full w-full object-cover"
+                />
               </div>
             </div>
           </div>
@@ -753,6 +789,41 @@ export function AdminConsoleView() {
                       <ResilientImage
                         src={m.presentPhoto || m.youthPhoto}
                         alt={m.fullName}
+                        downloadFileName={`${m.fullName}-chan-dung`}
+                        viewerSubtitle={m.role || 'Thành viên'}
+                        hideCornerButton
+                        canEdit
+                        onChangeImage={(nextUrl) =>
+                          updateData(
+                            (prev) => ({
+                              ...prev,
+                              members: prev.members.map((item) =>
+                                item.id === m.id
+                                  ? { ...item, presentPhoto: nextUrl, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                  : item
+                              ),
+                            }),
+                            `Đã lưu ảnh chân dung cho ${m.fullName}.`
+                          )
+                        }
+                        onDeleteImage={() =>
+                          updateData(
+                            (prev) => ({
+                              ...prev,
+                              members: prev.members.map((item) =>
+                                item.id === m.id
+                                  ? {
+                                      ...item,
+                                      ...(item.presentPhoto ? { presentPhoto: '' } : { youthPhoto: '' }),
+                                      dataOrigin: 'real',
+                                      updatedAt: new Date().toISOString(),
+                                    }
+                                  : item
+                              ),
+                            }),
+                            `Đã xóa ảnh chân dung của ${m.fullName}.`
+                          )
+                        }
                         className="h-full w-full object-cover"
                       />
                     </div>
@@ -894,7 +965,41 @@ export function AdminConsoleView() {
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="h-12 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10">
-                    <ResilientImage src={evt.coverImage} alt={evt.title} className="h-full w-full object-cover" />
+                    <ResilientImage
+                      src={evt.coverImage}
+                      alt={evt.title}
+                      downloadFileName={`su-kien-${evt.title}`}
+                      viewerSubtitle={`${evt.category} · ${evt.date}`}
+                      hideCornerButton
+                      canEdit
+                      onChangeImage={(nextUrl) =>
+                        updateData(
+                          (prev) => ({
+                            ...prev,
+                            events: prev.events.map((item) =>
+                              item.id === evt.id
+                                ? { ...item, coverImage: nextUrl, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                : item
+                            ),
+                          }),
+                          `Đã lưu ảnh bìa sự kiện "${evt.title}".`
+                        )
+                      }
+                      onDeleteImage={() =>
+                        updateData(
+                          (prev) => ({
+                            ...prev,
+                            events: prev.events.map((item) =>
+                              item.id === evt.id
+                                ? { ...item, coverImage: '', dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                : item
+                            ),
+                          }),
+                          `Đã xóa ảnh bìa sự kiện "${evt.title}".`
+                        )
+                      }
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                   <div className="min-w-0">
                     <div className="font-semibold text-white truncate">
@@ -942,6 +1047,16 @@ export function AdminConsoleView() {
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => saveAndPublishEvent(evt, { syncToApp: true })}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#F02028] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#d91b23] disabled:opacity-50 cursor-pointer"
+                    aria-label="Lưu và cập nhật sự kiện"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Lưu & Cập nhật</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -1119,6 +1234,35 @@ export function AdminConsoleView() {
                   <ResilientImage
                     src={data.home.anthem.coverImage}
                     alt="Ảnh bài hát"
+                    downloadFileName="anh-cover-bai-ca-truyen-thong"
+                    viewerSubtitle="Hình ảnh cover bài ca truyền thống"
+                    canEdit
+                    onChangeImage={(nextUrl) =>
+                      updateData(
+                        (prev) => ({
+                          ...prev,
+                          home: {
+                            ...prev.home,
+                            dataOrigin: 'real',
+                            anthem: { ...prev.home.anthem, coverImage: nextUrl },
+                          },
+                        }),
+                        'Đã lưu ảnh cover bài ca.'
+                      )
+                    }
+                    onDeleteImage={() =>
+                      updateData(
+                        (prev) => ({
+                          ...prev,
+                          home: {
+                            ...prev.home,
+                            dataOrigin: 'real',
+                            anthem: { ...prev.home.anthem, coverImage: '' },
+                          },
+                        }),
+                        'Đã xóa ảnh cover bài ca.'
+                      )
+                    }
                     className="h-full w-full object-cover"
                   />
                 </div>
@@ -1532,17 +1676,7 @@ export function AdminConsoleView() {
         isOpen={eventModalOpen}
         initialEvent={editingEvent}
         onClose={() => setEventModalOpen(false)}
-        onSave={(saved) =>
-          updateData((prev) => {
-            const exists = prev.events.some((e) => e.id === saved.id);
-            return {
-              ...prev,
-              events: exists
-                ? prev.events.map((e) => (e.id === saved.id ? saved : e))
-                : [saved, ...prev.events],
-            };
-          }, `Đã lưu sự kiện "${saved.title}".`)
-        }
+        onSave={(saved, options) => saveAndPublishEvent(saved, options)}
       />
     </div>
   );

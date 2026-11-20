@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDown,
   ArrowLeft,
@@ -34,7 +34,7 @@ type MemberViewMode = 'by_cohort' | 'flat';
 
 const UNASSIGNED_COHORT_KEY = '__unassigned__';
 
-export function MembersView() {
+export function MembersView({ initialGroup = 'member' }: { initialGroup?: MemberGroup }) {
   const {
     data,
     isAdmin,
@@ -45,9 +45,14 @@ export function MembersView() {
     updateSelfMemberProfile,
     createOwnMemberProfile,
     publishMemberUpdate,
+    saveAndPublishEvent,
   } = useMemoir();
   const [search, setSearch] = useState('');
-  const [groupFilter, setGroupFilter] = useState<'all' | MemberGroup>('member');
+  const [groupFilter, setGroupFilter] = useState<'all' | MemberGroup>(initialGroup);
+
+  useEffect(() => {
+    setGroupFilter(initialGroup);
+  }, [initialGroup]);
   const [viewMode, setViewMode] = useState<MemberViewMode>('by_cohort');
   const [cohortFilter, setCohortFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('manual');
@@ -203,8 +208,8 @@ export function MembersView() {
     updateSelfMemberProfile(
       saved,
       publishImmediately
-        ? undefined
-        : `Đã lưu chỉnh sửa hồ sơ ${saved.fullName}. Nhấn "Cập nhật" để đồng bộ lên Cloud Firestore.`
+        ? ''
+        : `Đã lưu chỉnh sửa hồ sơ ${saved.fullName}. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.`
     );
     if (publishImmediately) {
       await publishMemberUpdate(saved.id);
@@ -553,6 +558,21 @@ export function MembersView() {
                   <ResilientImage
                     src={member.youthPhoto}
                     alt={`${member.fullName} thời trẻ`}
+                    downloadFileName={`${member.fullName}-thoi-tre`}
+                    viewerSubtitle={`${member.fullName} · ${member.cohortLabel || 'Thời trẻ'}`}
+                    canEdit
+                    onChangeImage={(nextUrl) =>
+                      updateSelfMemberProfile(
+                        { ...member, youthPhoto: nextUrl },
+                        `Đã lưu ảnh thời trẻ của ${member.fullName}.`
+                      )
+                    }
+                    onDeleteImage={() =>
+                      updateSelfMemberProfile(
+                        { ...member, youthPhoto: '' },
+                        `Đã xóa ảnh thời trẻ của ${member.fullName}.`
+                      )
+                    }
                     className="h-full w-full object-cover"
                   />
                 </div>
@@ -570,6 +590,21 @@ export function MembersView() {
                   <ResilientImage
                     src={member.presentPhoto}
                     alt={`${member.fullName} hiện tại`}
+                    downloadFileName={`${member.fullName}-hien-tai`}
+                    viewerSubtitle={`${member.fullName} · ${member.presentLabel || 'Hiện tại'}`}
+                    canEdit
+                    onChangeImage={(nextUrl) =>
+                      updateSelfMemberProfile(
+                        { ...member, presentPhoto: nextUrl },
+                        `Đã lưu ảnh hiện tại của ${member.fullName}.`
+                      )
+                    }
+                    onDeleteImage={() =>
+                      updateSelfMemberProfile(
+                        { ...member, presentPhoto: '' },
+                        `Đã xóa ảnh hiện tại của ${member.fullName}.`
+                      )
+                    }
                     className="h-full w-full object-cover"
                   />
                 </div>
@@ -1062,6 +1097,7 @@ export function MembersView() {
         isOpen={formOpen}
         initialMember={editingMember}
         defaultCohortId={defaultCohortForNewMember}
+        defaultGroup={groupFilter === 'guest_advisor' ? 'guest_advisor' : 'member'}
         onClose={() => setFormOpen(false)}
         onSave={handleSaveMember}
       />
@@ -1087,17 +1123,7 @@ export function MembersView() {
         isOpen={linkedEventFormOpen}
         initialEvent={editingLinkedEvent}
         onClose={() => setLinkedEventFormOpen(false)}
-        onSave={(saved) =>
-          updateData((prev) => {
-            const exists = prev.events.some((e) => e.id === saved.id);
-            return {
-              ...prev,
-              events: exists
-                ? prev.events.map((e) => (e.id === saved.id ? saved : e))
-                : [saved, ...prev.events],
-            };
-          }, `Đã lưu sự kiện "${saved.title}".`)
-        }
+        onSave={(saved, options) => saveAndPublishEvent(saved, options)}
       />
     </div>
   );

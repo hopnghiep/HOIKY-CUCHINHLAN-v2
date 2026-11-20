@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import { INITIAL_MEMOIR_DATA, SCHEMA_VERSION } from '../data/initialData';
-import type { ActiveTab, AppSettings, MemberProfile, MemoirDatabase } from '../types/memoir';
+import type { ActiveTab, AppSettings, MemberProfile, MemoirDatabase, SchoolEvent } from '../types/memoir';
 import {
   listPreRestoreBackups,
   loadMemoirFromIndexedDB,
@@ -11,6 +11,7 @@ import {
 } from '../services/indexedDb';
 import {
   clearStoredAdminToken,
+  getAdminAuthHeaders,
   refreshFirebaseIdToken,
   setStoredAdminToken,
 } from '../services/authToken';
@@ -66,6 +67,7 @@ interface MemoirContextValue {
   updateSelfMemberProfile: (updatedMember: MemberProfile, label?: string) => void;
   createOwnMemberProfile: (newMember: MemberProfile) => Promise<boolean>;
   publishMemberUpdate: (memberId?: string) => Promise<boolean>;
+  saveAndPublishEvent: (event: SchoolEvent, options?: { syncToApp?: boolean }) => Promise<boolean>;
   undo: () => void;
   redo: () => void;
   syncNow: () => Promise<void>;
@@ -151,15 +153,47 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
         // Ignore offline health error
       }
 
-      const cached = await loadMemoirFromIndexedDB();
+      const [cached, serverDb] = await Promise.all([
+        loadMemoirFromIndexedDB(),
+        fetch('/api/memoir')
+          .then(async (res) => {
+            if (!res.ok) return null;
+            const json = (await res.json()) as MemoirDatabase;
+            if (json && json.home && Array.isArray(json.members) && Array.isArray(json.events)) {
+              return json;
+            }
+            return null;
+          })
+          .catch(() => null),
+      ]);
+
       if (active) {
-        if (cached && cached.home && Array.isArray(cached.members) && Array.isArray(cached.events)) {
-          const normalized: MemoirDatabase = {
-            ...cached,
-            cohorts: Array.isArray(cached.cohorts) ? cached.cohorts : [],
-          };
-          setData(normalized);
+        const validCached =
+          cached && cached.home && Array.isArray(cached.members) && Array.isArray(cached.events)
+            ? cached
+            : null;
+
+        let chosen: MemoirDatabase | null = null;
+        if (validCached && serverDb) {
+          const cachedTime = Date.parse(validCached.lastModified || '') || 0;
+          const serverTime = Date.parse(serverDb.lastModified || '') || 0;
+          chosen = serverTime >= cachedTime ? serverDb : validCached;
         } else {
+          chosen = serverDb || validCached;
+        }
+
+        if (chosen) {
+          const normalized: MemoirDatabase = {
+            ...chosen,
+            cohorts: Array.isArray(chosen.cohorts) ? chosen.cohorts : [],
+          };
+          dataRef.current = normalized;
+          setData(normalized);
+          if (chosen === serverDb) {
+            await saveMemoirToIndexedDB(normalized).catch(() => {});
+          }
+        } else {
+          dataRef.current = INITIAL_MEMOIR_DATA;
           setData(INITIAL_MEMOIR_DATA);
           await saveMemoirToIndexedDB(INITIAL_MEMOIR_DATA).catch(() => {});
         }
@@ -288,6 +322,12 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
           );
           lastCloudDbRef.current = nextDb;
           setFirestoreSynced(true);
+          // Mirror admin updates to server store so unauthenticated visitors see latest public data
+          fetch('/api/memoir', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAdminAuthHeaders() },
+            body: JSON.stringify(nextDb),
+          }).catch(() => {});
         }
         setLastSavedAt(new Date().toISOString());
       } finally {
@@ -342,14 +382,9 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
     [scheduleCloudSync]
   );
 
-  const canEditMember = useCallback(
-    (member: MemberProfile): boolean => {
-      if (isAdmin) return true;
-      if (!currentUser) return false;
-      return Boolean(member.ownerUid && member.ownerUid === currentUser.uid);
-    },
-    [currentUser, isAdmin]
-  );
+  const canEditMember = useCallback((_member: MemberProfile): boolean => {
+    return true;
+  }, []);
 
   const updateSelfMemberProfile = useCallback(
     (updatedMember: MemberProfile, label?: string) => {
@@ -376,6 +411,7 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
 
       setHistoryPast((past) => [...past.slice(-(MAX_HISTORY - 1)), current]);
       setHistoryFuture([]);
+      dataRef.current = nextDb;
       setData(nextDb);
 
       if (isAdminRef.current && user) {
@@ -387,14 +423,20 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
             notify(formatFirestoreUserMessage(err), 'error');
           });
       } else {
-        setPendingMemberIds((ids) => (ids.includes(updatedMember.id) ? ids : [...ids, updatedMember.id]));
+        setPendingMemberIds((ids) => {
+          const nextIds = ids.includes(updatedMember.id) ? ids : [...ids, updatedMember.id];
+          pendingMemberIdsRef.current = nextIds;
+          return nextIds;
+        });
         saveMemoirToIndexedDB(nextDb)
           .then(() => {
             setLastSavedAt(new Date().toISOString());
-            notify(
-              label || 'Đã lưu thay đổi cục bộ. Nhấn nút "Cập nhật" để đồng bộ lên Cloud Firestore.',
-              'info'
-            );
+            if (label !== '') {
+              notify(
+                label || 'Đã lưu thay đổi cục bộ. Nhấn nút "Cập nhật lên App" để lưu vào ứng dụng.',
+                'info'
+              );
+            }
           })
           .catch(() => {});
       }
@@ -441,11 +483,6 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
   const publishMemberUpdate = useCallback(
     async (memberId?: string): Promise<boolean> => {
       const user = currentUserRef.current;
-      if (!user) {
-        notify('Vui lòng đăng nhập Google (Firebase Auth) để đồng bộ hồ sơ lên Cloud Firestore.', 'error');
-        return false;
-      }
-
       const targetIds = memberId ? [memberId] : pendingMemberIdsRef.current;
       if (targetIds.length === 0) {
         return true;
@@ -454,20 +491,47 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
       setIsSaving(true);
       try {
         const current = dataRef.current;
+        let syncedToCloud = false;
+
         for (const id of targetIds) {
           const target = current.members.find((m) => m.id === id);
           if (!target) continue;
-          if (!isAdminRef.current && target.ownerUid !== user.uid) {
-            throw new Error(
-              'Bạn chỉ có quyền cập nhật lên Cloud Firestore cho hồ sơ thuộc tài khoản Google của mình (hoặc nhờ Quản trị viên liên kết UID).'
-            );
+
+          if (user && (isAdminRef.current || target.ownerUid === user.uid)) {
+            await saveSelfMemberToFirestore(target, user.uid, isAdminRef.current, trackerRef.current);
+            syncedToCloud = true;
+            // Best-effort mirror to server store
+            fetch(`/api/members/${encodeURIComponent(target.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ member: target, seedDatabase: current }),
+            }).catch(() => {});
+          } else {
+            const res = await fetch(`/api/members/${encodeURIComponent(target.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ member: target, seedDatabase: current }),
+            });
+            if (!res.ok) {
+              const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(errJson.error || 'Không thể cập nhật hồ sơ thành viên lên máy chủ.');
+            }
           }
-          await saveSelfMemberToFirestore(target, user.uid, isAdminRef.current, trackerRef.current);
         }
+
         await saveMemoirToIndexedDB(current);
-        setPendingMemberIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+        setPendingMemberIds((prev) => {
+          const next = prev.filter((id) => !targetIds.includes(id));
+          pendingMemberIdsRef.current = next;
+          return next;
+        });
         setLastSavedAt(new Date().toISOString());
-        notify('Đã đồng bộ hồ sơ thành viên lên Cloud Firestore thành công.', 'success');
+        notify(
+          syncedToCloud
+            ? 'Đã đồng bộ hồ sơ thành viên lên Cloud Firestore thành công.'
+            : 'Đã cập nhật hồ sơ thành viên lên ứng dụng thành công.',
+          'success'
+        );
         return true;
       } catch (err) {
         notify(formatFirestoreUserMessage(err), 'error');
@@ -477,6 +541,89 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [notify]
+  );
+
+  const saveAndPublishEvent = useCallback(
+    async (targetEvent: SchoolEvent, options?: { syncToApp?: boolean }): Promise<boolean> => {
+      const syncToApp = options?.syncToApp !== false;
+      const current = dataRef.current;
+      const normalizedEvent: SchoolEvent = {
+        ...targetEvent,
+        dataOrigin: 'real',
+        updatedAt: new Date().toISOString(),
+      };
+      const exists = current.events.some((e) => e.id === normalizedEvent.id);
+      const nextDb: MemoirDatabase = {
+        ...current,
+        schemaVersion: SCHEMA_VERSION,
+        lastModified: new Date().toISOString(),
+        events: exists
+          ? current.events.map((e) => (e.id === normalizedEvent.id ? normalizedEvent : e))
+          : [normalizedEvent, ...current.events],
+      };
+
+      setHistoryPast((past) => [...past.slice(-(MAX_HISTORY - 1)), current]);
+      setHistoryFuture([]);
+      dataRef.current = nextDb;
+      setData(nextDb);
+
+      if (!syncToApp) {
+        try {
+          await saveMemoirToIndexedDB(nextDb);
+          setLastSavedAt(new Date().toISOString());
+          notify(`Đã lưu nội dung sự kiện "${normalizedEvent.title}".`, 'success');
+          return true;
+        } catch {
+          notify('Không thể lưu nội dung sự kiện vào bộ nhớ cục bộ.', 'error');
+          return false;
+        }
+      }
+
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+
+      const user = currentUserRef.current;
+      setIsSaving(true);
+      try {
+        if (user && isAdminRef.current) {
+          await refreshFirebaseIdToken().catch(() => {});
+          await persistDatabase(nextDb, true, false);
+          // Also ensure event endpoint is mirrored
+          fetch(`/api/events/${encodeURIComponent(normalizedEvent.id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAdminAuthHeaders() },
+            body: JSON.stringify({ event: normalizedEvent, seedDatabase: nextDb }),
+          }).catch(() => {});
+          notify(
+            `Đã lưu và cập nhật sự kiện "${normalizedEvent.title}" lên Cloud Firestore.`,
+            'success'
+          );
+          return true;
+        }
+
+        await saveMemoirToIndexedDB(nextDb);
+        const res = await fetch(`/api/events/${encodeURIComponent(normalizedEvent.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: normalizedEvent, seedDatabase: nextDb }),
+        });
+        if (!res.ok) {
+          const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errJson.error || 'Không thể cập nhật sự kiện lên ứng dụng.');
+        }
+        setLastSavedAt(new Date().toISOString());
+        notify(`Đã lưu và cập nhật sự kiện "${normalizedEvent.title}" lên ứng dụng.`, 'success');
+        return true;
+      } catch (err) {
+        notify(formatFirestoreUserMessage(err), 'error');
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [notify, persistDatabase]
   );
 
   const undo = useCallback(() => {
@@ -512,6 +659,10 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
   const syncNow = useCallback(async () => {
     const user = currentUserRef.current;
     if (!user) {
+      if (pendingMemberIdsRef.current.length > 0) {
+        await publishMemberUpdate();
+        return;
+      }
       await saveMemoirToIndexedDB(dataRef.current);
       notify('Đăng nhập bằng Google để đồng bộ trực tuyến với Cloud Firestore.', 'info');
       return;
@@ -734,6 +885,7 @@ export function MemoirProvider({ children }: { children: React.ReactNode }) {
         updateSelfMemberProfile,
         createOwnMemberProfile,
         publishMemberUpdate,
+        saveAndPublishEvent,
         undo,
         redo,
         syncNow,

@@ -309,6 +309,35 @@ export function HomeView() {
               <ResilientImage
                 src={data.home.hero.heroImage}
                 alt="Không gian trường THPT Hoàng Hoa Thám – Chi đoàn Cù Chính Lan"
+                downloadFileName="anh-bia-trang-chu-chi-doan-cu-chinh-lan"
+                viewerSubtitle="Ảnh bìa Trang chủ · Hồi ký Chi đoàn Cù Chính Lan"
+                canEdit
+                onChangeImage={(nextUrl) =>
+                  updateData(
+                    (prev) => ({
+                      ...prev,
+                      home: {
+                        ...prev.home,
+                        dataOrigin: 'real',
+                        hero: { ...prev.home.hero, heroImage: nextUrl },
+                      },
+                    }),
+                    'Đã lưu ảnh bìa Trang chủ.'
+                  )
+                }
+                onDeleteImage={() =>
+                  updateData(
+                    (prev) => ({
+                      ...prev,
+                      home: {
+                        ...prev.home,
+                        dataOrigin: 'real',
+                        hero: { ...prev.home.hero, heroImage: '' },
+                      },
+                    }),
+                    'Đã xóa ảnh bìa Trang chủ.'
+                  )
+                }
                 className="h-full w-full object-cover"
               />
             </div>
@@ -1122,6 +1151,35 @@ export function HomeView() {
               <ResilientImage
                 src={data.home.anthem.coverImage}
                 alt={`Ảnh bìa ${data.home.anthem.title}`}
+                downloadFileName={`anh-bia-${data.home.anthem.title || 'bai-ca-truyen-thong'}`}
+                viewerSubtitle="Ảnh cover Bài ca truyền thống"
+                canEdit
+                onChangeImage={(nextUrl) =>
+                  updateData(
+                    (prev) => ({
+                      ...prev,
+                      home: {
+                        ...prev.home,
+                        dataOrigin: 'real',
+                        anthem: { ...prev.home.anthem, coverImage: nextUrl },
+                      },
+                    }),
+                    'Đã lưu ảnh cover bài ca.'
+                  )
+                }
+                onDeleteImage={() =>
+                  updateData(
+                    (prev) => ({
+                      ...prev,
+                      home: {
+                        ...prev.home,
+                        dataOrigin: 'real',
+                        anthem: { ...prev.home.anthem, coverImage: '' },
+                      },
+                    }),
+                    'Đã xóa ảnh cover bài ca.'
+                  )
+                }
                 className="h-full w-full object-cover"
               />
             </div>
@@ -1477,6 +1535,9 @@ export function HomeView() {
                           <ResilientImage
                             src={thumbUrl}
                             alt={track.title}
+                            downloadFileName={track.title}
+                            viewerSubtitle={track.author}
+                            hideCornerButton
                             className="h-full w-full object-cover"
                           />
                           {embedUrl && (
@@ -1594,6 +1655,8 @@ export function HomeView() {
                         <ResilientImage
                           src={thumbUrl}
                           alt={track.title}
+                          downloadFileName={track.title}
+                          viewerSubtitle={track.author}
                           className="h-full w-full object-cover"
                         />
                         {embedUrl && (

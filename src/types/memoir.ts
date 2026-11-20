@@ -126,6 +126,25 @@ export interface MemberArticle {
   publishedAt: string;
 }
 
+export interface MemberYoutubeVideo {
+  id: string;
+  title: string;
+  youtubeUrl: string;
+  notes?: string;
+  addedAt: string;
+}
+
+export interface MemberDocument {
+  id: string;
+  title: string;
+  fileName: string;
+  url: string;
+  mimeType: string;
+  sizeBytes?: number;
+  notes?: string;
+  uploadedAt: string;
+}
+
 export interface CohortItem {
   id: string;
   name: string;
@@ -158,6 +177,8 @@ export interface MemberProfile {
   achievements: string[];
   activityPhotos: MemberActivityPhoto[];
   articles: MemberArticle[];
+  youtubeVideos?: MemberYoutubeVideo[];
+  documents?: MemberDocument[];
   socials: {
     facebook?: string;
     website?: string;
@@ -236,4 +257,4 @@ export interface BackupPackage extends MemoirDatabase {
   };
 }
 
-export type ActiveTab = 'home' | 'members' | 'events' | 'admin';
+export type ActiveTab = 'home' | 'members' | 'guests' | 'events' | 'admin';

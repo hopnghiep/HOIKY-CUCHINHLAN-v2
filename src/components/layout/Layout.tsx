@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  Cloud,
   HelpCircle,
   LogIn,
   LogOut,
@@ -49,7 +48,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [dismissAuthBanner, setDismissAuthBanner] = useState(false);
 
   useEffect(() => {
     const onFsChange = () => {
@@ -71,9 +69,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const membersOnlyCount = data.members.filter((m) => m.group === 'member').length;
+  const guestsCount = data.members.filter((m) => m.group === 'guest_advisor').length;
+
   const navItems: { id: ActiveTab; label: string; count?: number }[] = [
     { id: 'home', label: 'Trang chủ' },
-    { id: 'members', label: 'Thành viên', count: data.members.length },
+    { id: 'members', label: 'Thành viên', count: membersOnlyCount },
+    { id: 'guests', label: 'Khách mời / Người có liên quan', count: guestsCount },
     { id: 'events', label: 'Sự kiện', count: data.events.length },
   ];
 
@@ -85,55 +87,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={`min-h-screen flex flex-col ${outerBg} text-[#F4F4F5] transition-colors duration-200`}>
-      {/* Sticky Single-Row Header */}
+      {/* Sticky Header */}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#171719]/95 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          {/* Left: Emblem + Brand Title (single line) */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('home')}
-            className="flex items-center gap-3 text-left whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#F02028] rounded-lg"
-          >
-            <svg
-              viewBox="0 0 36 36"
-              className="h-8 w-8 shrink-0"
-              aria-hidden="true"
+        <div className="mx-auto flex h-14 sm:h-16 max-w-[1440px] items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 lg:px-8">
+          {/* Left: Emblem + Brand Title + Fullscreen Toggle */}
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('home')}
+              className="flex items-center gap-2 sm:gap-3 text-left whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#F02028] rounded-lg"
             >
-              <rect x="2" y="2" width="32" height="32" rx="9" fill="#F02028" />
-              <path
-                d="M18 8.5L20.7 14.3L27 15.1L22.3 19.4L23.5 25.6L18 22.5L12.5 25.6L13.7 19.4L9 15.1L15.3 14.3L18 8.5Z"
-                fill="#FFFFFF"
-              />
-            </svg>
-            <span className="font-display text-base sm:text-lg font-semibold tracking-tight text-white whitespace-nowrap shrink-0">
-              Chi đoàn Cù Chính Lan
-            </span>
-          </button>
+              <svg
+                viewBox="0 0 36 36"
+                className="h-8 w-8 shrink-0"
+                aria-hidden="true"
+              >
+                <rect x="2" y="2" width="32" height="32" rx="9" fill="#F02028" />
+                <path
+                  d="M18 8.5L20.7 14.3L27 15.1L22.3 19.4L23.5 25.6L18 22.5L12.5 25.6L13.7 19.4L9 15.1L15.3 14.3L18 8.5Z"
+                  fill="#FFFFFF"
+                />
+              </svg>
+              <span className="font-display text-[15px] sm:text-lg font-semibold tracking-tight text-white whitespace-nowrap shrink-0">
+                Chi đoàn Cù Chính Lan
+              </span>
+            </button>
 
-          {/* Center: Clean Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6" aria-label="Điều hướng chính">
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveTab(item.id)}
-                  className={`relative py-2 text-sm font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                    isActive ? 'text-white' : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {typeof item.count === 'number' && (
-                    <span className="ml-1.5 font-mono-num text-xs text-zinc-400">({item.count})</span>
-                  )}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#F02028]" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
+              aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
+              className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors shrink-0 cursor-pointer"
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          </div>
 
           {/* Right: Operational Toolbar + Primary Auth Action */}
           <div className="flex items-center gap-1.5 shrink-0">
@@ -181,16 +170,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 <Redo2 className="w-3.5 h-3.5" />
                 <span className="hidden xl:inline">Làm lại</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
-                aria-label="Toàn màn hình"
-                className="rounded-lg p-1.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              >
-                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
 
               <button
@@ -270,36 +249,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Subtle Cloud Sign-in Strip for Unauthenticated Visitors */}
-        {!isSignedIn && !dismissAuthBanner && (
-          <div className="border-t border-white/10 bg-[#141416]">
-            <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs text-zinc-300 sm:px-6 lg:px-8">
-              <div className="flex items-center gap-2">
-                <Cloud className="w-3.5 h-3.5 text-[#F02028] shrink-0" />
-                <span>
-                  Đăng nhập bằng tài khoản Google để đồng bộ trực tuyến dữ liệu Hồi ký từ Cloud Firestore và cập nhật hồ sơ cá nhân.
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
+        {/* Navigation Links directly below Brand Title */}
+        <div className="border-t border-white/5">
+          <nav
+            className="mx-auto flex max-w-[1440px] items-center gap-5 sm:gap-6 overflow-x-auto px-3 sm:px-6 lg:px-8"
+            aria-label="Điều hướng chính"
+          >
+            {navItems.map((item) => {
+              const isActive = activeTab === item.id;
+              return (
                 <button
+                  key={item.id}
                   type="button"
-                  onClick={() => setLoginOpen(true)}
-                  className="rounded-lg bg-[#F02028] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#d91b23] cursor-pointer"
+                  onClick={() => setActiveTab(item.id)}
+                  className={`relative py-2.5 text-sm font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    isActive ? 'text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
                 >
-                  Đăng nhập Google
+                  <span>{item.label}</span>
+                  {typeof item.count === 'number' && (
+                    <span className="ml-1.5 font-mono-num text-xs text-zinc-400">({item.count})</span>
+                  )}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#F02028]" />
+                  )}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setDismissAuthBanner(true)}
-                  aria-label="Ẩn thanh nhắc đăng nhập"
-                  className="rounded p-1 text-zinc-500 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+              );
+            })}
+          </nav>
+        </div>
 
         {/* Mobile / Tablet Drawer Menu */}
         {mobileMenuOpen && (

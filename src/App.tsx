@@ -26,7 +26,9 @@ function MemoirRouter() {
 
   switch (activeTab) {
     case 'members':
-      return <MembersView />;
+      return <MembersView initialGroup="member" />;
+    case 'guests':
+      return <MembersView initialGroup="guest_advisor" />;
     case 'events':
       return <EventsView />;
     case 'admin':

@@ -383,6 +383,14 @@
           "type": "array",
           "description": "Bounded list of up to 50 shared article objects."
         },
+        "youtubeVideos": {
+          "type": "array",
+          "description": "Bounded list of up to 30 personal YouTube video link objects."
+        },
+        "documents": {
+          "type": "array",
+          "description": "Bounded list of up to 50 personal document storage objects."
+        },
         "socials": {
           "type": "object",
           "description": "Public social links (facebook, website)."

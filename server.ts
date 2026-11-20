@@ -465,6 +465,8 @@ async function startServer(): Promise<void> {
         achievements: Array.isArray(member.achievements) ? member.achievements : existing.achievements,
         activityPhotos: Array.isArray(member.activityPhotos) ? member.activityPhotos : existing.activityPhotos,
         articles: Array.isArray(member.articles) ? member.articles : existing.articles,
+        youtubeVideos: Array.isArray(member.youtubeVideos) ? member.youtubeVideos : existing.youtubeVideos,
+        documents: Array.isArray(member.documents) ? member.documents : existing.documents,
         socials: member.socials && typeof member.socials === 'object' ? member.socials : existing.socials,
         favoriteQuote: typeof member.favoriteQuote === 'string' ? member.favoriteQuote : existing.favoriteQuote,
         dataOrigin: 'real',
@@ -487,6 +489,86 @@ async function startServer(): Promise<void> {
       res.json({ ok: true, member: updatedMember, savedAt: nextDb.lastModified });
     } catch {
       res.status(500).json({ error: 'Không thể cập nhật hồ sơ thành viên lên máy chủ.' });
+    }
+  });
+
+  // Persist created or updated event content on the server store
+  app.put('/api/events/:id', (req: Request, res: Response) => {
+    const eventId = String(req.params.id || '').trim();
+    const { event, seedDatabase } = (req.body || {}) as {
+      event?: Record<string, unknown>;
+      seedDatabase?: Record<string, unknown>;
+    };
+
+    if (!eventId || !event || typeof event !== 'object' || event.id !== eventId) {
+      res.status(400).json({ error: 'Dữ liệu sự kiện không hợp lệ.' });
+      return;
+    }
+
+    try {
+      let currentDb: Record<string, unknown> | null = null;
+      if (fs.existsSync(MEMOIR_STORE_PATH)) {
+        currentDb = JSON.parse(fs.readFileSync(MEMOIR_STORE_PATH, 'utf8')) as Record<string, unknown>;
+      } else if (
+        seedDatabase &&
+        typeof seedDatabase.schemaVersion === 'string' &&
+        seedDatabase.home &&
+        Array.isArray(seedDatabase.members) &&
+        Array.isArray(seedDatabase.events)
+      ) {
+        currentDb = seedDatabase;
+      }
+
+      if (!currentDb || !Array.isArray(currentDb.events)) {
+        res.status(404).json({ error: 'Không tìm thấy cơ sở dữ liệu hồi ký trên máy chủ.' });
+        return;
+      }
+
+      const eventsList = currentDb.events as Record<string, unknown>[];
+      const existingIdx = eventsList.findIndex((e) => e.id === eventId);
+      const existing = existingIdx >= 0 ? eventsList[existingIdx] : {};
+
+      const savedEvent: Record<string, unknown> = {
+        ...existing,
+        id: eventId,
+        title: typeof event.title === 'string' && event.title.trim() ? event.title.trim() : existing.title || 'Sự kiện Chi đoàn',
+        category: typeof event.category === 'string' ? event.category : existing.category || 'Hoạt động khác',
+        date: typeof event.date === 'string' ? event.date : existing.date || '',
+        startTime: typeof event.startTime === 'string' ? event.startTime : existing.startTime || '',
+        endTime: typeof event.endTime === 'string' ? event.endTime : existing.endTime || '',
+        location: typeof event.location === 'string' ? event.location : existing.location || '',
+        intro: typeof event.intro === 'string' ? event.intro : existing.intro || '',
+        proceedings: typeof event.proceedings === 'string' ? event.proceedings : existing.proceedings || '',
+        results: typeof event.results === 'string' ? event.results : existing.results || '',
+        summary: typeof event.summary === 'string' ? event.summary : existing.summary || '',
+        coverImage: typeof event.coverImage === 'string' ? event.coverImage : existing.coverImage || '',
+        photos: Array.isArray(event.photos) ? event.photos : existing.photos || [],
+        videos: Array.isArray(event.videos) ? event.videos : existing.videos || [],
+        participantMemberIds: Array.isArray(event.participantMemberIds)
+          ? event.participantMemberIds
+          : existing.participantMemberIds || [],
+        dataOrigin: 'real',
+        updatedAt: new Date().toISOString(),
+      };
+
+      const nextEvents =
+        existingIdx >= 0
+          ? eventsList.map((e, i) => (i === existingIdx ? savedEvent : e))
+          : [savedEvent, ...eventsList];
+
+      const nextDb: Record<string, unknown> = {
+        ...currentDb,
+        lastModified: new Date().toISOString(),
+        events: nextEvents,
+      };
+
+      if (fs.existsSync(MEMOIR_STORE_PATH)) {
+        fs.copyFileSync(MEMOIR_STORE_PATH, MEMOIR_BACKUP_PATH);
+      }
+      atomicWriteJson(MEMOIR_STORE_PATH, nextDb);
+      res.json({ ok: true, event: savedEvent, savedAt: nextDb.lastModified });
+    } catch {
+      res.status(500).json({ error: 'Không thể lưu và cập nhật sự kiện lên máy chủ.' });
     }
   });
 
@@ -530,6 +612,111 @@ async function startServer(): Promise<void> {
       res.json({ ok: true, url: `/uploads/${outName}`, mimeType });
     } catch {
       res.status(500).json({ error: 'Không thể lưu ảnh lên máy chủ.' });
+    }
+  });
+
+  // Member personal document upload (PDF, Office, TXT, CSV, ZIP, images up to 20MB)
+  app.post('/api/media/member-document', (req: Request, res: Response) => {
+    const { dataUrl, fileName, mimeType: declaredMime } = (req.body || {}) as {
+      dataUrl?: string;
+      fileName?: string;
+      mimeType?: string;
+    };
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+      res.status(400).json({ error: 'Dữ liệu tài liệu tải lên không hợp lệ.' });
+      return;
+    }
+    const commaIdx = dataUrl.indexOf(',');
+    if (commaIdx === -1 || !dataUrl.slice(0, commaIdx).includes(';base64')) {
+      res.status(400).json({ error: 'Định dạng tệp tải lên không hợp lệ.' });
+      return;
+    }
+    const headerMime = dataUrl.slice(5, commaIdx).split(';')[0].trim().toLowerCase();
+    const effectiveMime = (headerMime || declaredMime || 'application/octet-stream').toLowerCase();
+    const base64Body = dataUrl.slice(commaIdx + 1);
+
+    const extFromName = path.extname(String(fileName || '')).toLowerCase();
+    const allowedExtensions = new Set([
+      '.pdf',
+      '.doc',
+      '.docx',
+      '.xls',
+      '.xlsx',
+      '.ppt',
+      '.pptx',
+      '.txt',
+      '.csv',
+      '.md',
+      '.rtf',
+      '.odt',
+      '.ods',
+      '.odp',
+      '.zip',
+      '.rar',
+      '.7z',
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.webp',
+      '.mp3',
+      '.wav',
+      '.m4a',
+    ]);
+    const mimeToExt: Record<string, string> = {
+      'application/pdf': '.pdf',
+      'application/msword': '.doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+      'application/vnd.ms-excel': '.xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+      'application/vnd.ms-powerpoint': '.ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+      'text/plain': '.txt',
+      'text/csv': '.csv',
+      'text/markdown': '.md',
+      'application/zip': '.zip',
+      'application/x-zip-compressed': '.zip',
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'audio/mpeg': '.mp3',
+      'audio/wav': '.wav',
+    };
+
+    const resolvedExt = allowedExtensions.has(extFromName)
+      ? extFromName
+      : mimeToExt[effectiveMime] || '';
+
+    if (!resolvedExt) {
+      res.status(400).json({
+        error: 'Định dạng tài liệu chưa được hỗ trợ. Vui lòng dùng PDF, Word, Excel, PowerPoint, TXT, CSV, ZIP hoặc ảnh.',
+      });
+      return;
+    }
+
+    const originalName = (fileName || `tai_lieu${resolvedExt}`).trim().slice(0, 160);
+    const safeBase = originalName
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 40);
+    const outName = `doc_${safeBase || 'file'}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${resolvedExt}`;
+    const outPath = path.join(UPLOADS_DIR, outName);
+
+    try {
+      const buffer = Buffer.from(base64Body, 'base64');
+      if (buffer.byteLength > 20 * 1024 * 1024) {
+        res.status(413).json({ error: 'Dung lượng tài liệu vượt quá giới hạn 20MB.' });
+        return;
+      }
+      fs.writeFileSync(outPath, buffer);
+      res.json({
+        ok: true,
+        url: `/uploads/${outName}`,
+        mimeType: effectiveMime,
+        fileName: originalName,
+        sizeBytes: buffer.byteLength,
+      });
+    } catch {
+      res.status(500).json({ error: 'Không thể lưu tài liệu lên máy chủ.' });
     }
   });
 

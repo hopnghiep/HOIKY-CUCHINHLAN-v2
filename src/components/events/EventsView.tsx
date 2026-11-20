@@ -9,6 +9,7 @@ import {
   List,
   MapPin,
   Plus,
+  Save,
   Search,
   Trash2,
 } from 'lucide-react';
@@ -31,7 +32,7 @@ const CATEGORIES: ('Tất cả' | EventCategory)[] = [
 ];
 
 export function EventsView() {
-  const { data, isAdmin, updateData } = useMemoir();
+  const { data, isAdmin, isSaving, updateData, saveAndPublishEvent } = useMemoir();
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [categoryFilter, setCategoryFilter] = useState<'Tất cả' | EventCategory>('Tất cả');
   const [search, setSearch] = useState('');
@@ -91,20 +92,8 @@ export function EventsView() {
     return cells;
   }, [calendarMonth, filteredEvents]);
 
-  const handleSaveEvent = (saved: SchoolEvent) => {
-    updateData((prev) => {
-      const exists = prev.events.some((e) => e.id === saved.id);
-      if (exists) {
-        return {
-          ...prev,
-          events: prev.events.map((e) => (e.id === saved.id ? saved : e)),
-        };
-      }
-      return {
-        ...prev,
-        events: [saved, ...prev.events],
-      };
-    }, `Đã lưu sự kiện "${saved.title}".`);
+  const handleSaveEvent = (saved: SchoolEvent, options?: { syncToApp?: boolean }) => {
+    return saveAndPublishEvent(saved, options);
   };
 
   return (
@@ -220,7 +209,40 @@ export function EventsView() {
               >
                 <div>
                   <div className="relative aspect-[16/10] bg-[#171719]">
-                    <ResilientImage src={evt.coverImage} alt={evt.title} className="h-full w-full object-cover" />
+                    <ResilientImage
+                      src={evt.coverImage}
+                      alt={evt.title}
+                      downloadFileName={`su-kien-${evt.title}`}
+                      viewerSubtitle={`${evt.category} · ${evt.date}`}
+                      canEdit
+                      onChangeImage={(nextUrl) =>
+                        updateData(
+                          (prev) => ({
+                            ...prev,
+                            events: prev.events.map((e) =>
+                              e.id === evt.id
+                                ? { ...e, coverImage: nextUrl, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                : e
+                            ),
+                          }),
+                          `Đã lưu ảnh bìa sự kiện "${evt.title}".`
+                        )
+                      }
+                      onDeleteImage={() =>
+                        updateData(
+                          (prev) => ({
+                            ...prev,
+                            events: prev.events.map((e) =>
+                              e.id === evt.id
+                                ? { ...e, coverImage: '', dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                                : e
+                            ),
+                          }),
+                          `Đã xóa ảnh bìa sự kiện "${evt.title}".`
+                        )
+                      }
+                      className="h-full w-full object-cover"
+                    />
                   </div>
 
                   <div className="p-5 space-y-3">
@@ -294,18 +316,30 @@ export function EventsView() {
                   </div>
                 </div>
 
-                <div className="px-5 pb-5 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-zinc-400">
+                <div className="px-5 pb-5 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
                   <span className="font-mono-num">
                     {evt.photos.length} ảnh · {evt.participantMemberIds.length} thành viên
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEventId(evt.id)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#F02028] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    Xem chi tiết
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveAndPublishEvent(evt, { syncToApp: true })}
+                      disabled={isSaving}
+                      title="Lưu và cập nhật nội dung sự kiện này"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#171719] px-3 py-2 text-xs font-medium text-white hover:border-[#F02028] hover:bg-white/10 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5 text-[#F02028]" />
+                      <span>Lưu & Cập nhật</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEventId(evt.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#F02028] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Xem chi tiết
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}

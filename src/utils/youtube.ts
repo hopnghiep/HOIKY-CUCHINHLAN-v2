@@ -22,3 +22,8 @@ export function getYoutubeEmbedUrl(url: string): string | null {
   const id = extractYoutubeId(url);
   return id ? `https://www.youtube.com/embed/${id}` : null;
 }
+
+export function getYoutubeThumbnailUrl(url: string): string | null {
+  const id = extractYoutubeId(url);
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+}

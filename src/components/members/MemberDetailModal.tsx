@@ -4,25 +4,42 @@ import {
   Award,
   BookOpen,
   Calendar,
+  Check,
+  Copy,
+  Download,
   Edit3,
+  ExternalLink,
+  FileText,
   Flag,
   Globe,
   Layers,
+  Link2,
   Mail,
   MessageCircle,
   MessageSquareQuote,
   Phone,
+  Play,
   Plus,
   Quote,
   RefreshCw,
   Trash2,
+  Upload,
   X,
+  Youtube,
 } from 'lucide-react';
 import { useMemoir } from '../../context/MemoirContext';
-import type { MemberProfile } from '../../types/memoir';
+import type { MemberDocument, MemberProfile, MemberYoutubeVideo } from '../../types/memoir';
 import { ResilientImage } from '../common/ResilientMedia';
 import { CollapsibleText } from '../common/CollapsibleText';
-import { uploadOrEncodeMedia } from '../../services/indexedDb';
+import { uploadOrEncodeDocument, uploadOrEncodeMedia } from '../../services/indexedDb';
+import { getYoutubeEmbedUrl, getYoutubeThumbnailUrl } from '../../utils/youtube';
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 interface MemberDetailModalProps {
   member: MemberProfile | null;
@@ -34,6 +51,8 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
   const {
     data,
     isAdmin,
+    currentUser,
+    firestoreSynced,
     isSaving,
     pendingMemberIds,
     canEditMember,
@@ -46,10 +65,26 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
   const [showArticleForm, setShowArticleForm] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  const [showYoutubeForm, setShowYoutubeForm] = useState(false);
+  const [newYoutubeUrl, setNewYoutubeUrl] = useState('');
+  const [newYoutubeTitle, setNewYoutubeTitle] = useState('');
+  const [newYoutubeNotes, setNewYoutubeNotes] = useState('');
+
+  const [showDocLinkForm, setShowDocLinkForm] = useState(false);
+  const [newDocTitle, setNewDocTitle] = useState('');
+  const [newDocUrl, setNewDocUrl] = useState('');
+  const [newDocNotes, setNewDocNotes] = useState('');
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [playingYoutubeId, setPlayingYoutubeId] = useState<string | null>(null);
+
   if (!member) return null;
 
   const editable = canEditMember(member);
   const hasPendingUpdate = !isAdmin && editable && pendingMemberIds.includes(member.id);
+  const youtubeVideos: MemberYoutubeVideo[] = Array.isArray(member.youtubeVideos) ? member.youtubeVideos : [];
+  const memberDocuments: MemberDocument[] = Array.isArray(member.documents) ? member.documents : [];
   const memberCohort = (data.cohorts || []).find((c) => c.id === member.cohortId);
   const linkedEvents = memberCohort
     ? data.events.filter((e) => (memberCohort.linkedEventIds || []).includes(e.id))
@@ -122,6 +157,145 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
     setShowArticleForm(false);
   };
 
+  const copyTextToClipboard = async (text: string, itemId: string, successMessage: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopiedId(itemId);
+      notify(successMessage, 'success');
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === itemId ? null : prev));
+      }, 2000);
+    } catch {
+      notify('Không thể sao chép tự động trên trình duyệt này.', 'error');
+    }
+  };
+
+  const handleAddYoutube = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedUrl = newYoutubeUrl.trim();
+    if (!getYoutubeEmbedUrl(trimmedUrl)) {
+      notify('Đường dẫn YouTube không hợp lệ. Vui lòng dán link youtube.com hoặc youtu.be.', 'error');
+      return;
+    }
+    const item: MemberYoutubeVideo = {
+      id: `ytm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: newYoutubeTitle.trim() || 'Video YouTube chia sẻ',
+      youtubeUrl: trimmedUrl,
+      notes: newYoutubeNotes.trim(),
+      addedAt: new Date().toISOString().slice(0, 10),
+    };
+    updateSelfMemberProfile(
+      {
+        ...member,
+        youtubeVideos: [...youtubeVideos, item],
+        dataOrigin: 'real',
+        updatedAt: new Date().toISOString(),
+      },
+      isAdmin
+        ? 'Đã thêm liên kết YouTube vào hồ sơ.'
+        : 'Đã thêm liên kết YouTube. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+    );
+    setNewYoutubeUrl('');
+    setNewYoutubeTitle('');
+    setNewYoutubeNotes('');
+    setShowYoutubeForm(false);
+  };
+
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploadingDoc(true);
+    try {
+      const added: MemberDocument[] = [];
+      for (const file of files) {
+        const res = await uploadOrEncodeDocument(file);
+        added.push({
+          id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          title: file.name.replace(/\.[^.]+$/, '') || file.name,
+          fileName: res.fileName,
+          url: res.url,
+          mimeType: res.mimeType,
+          sizeBytes: res.sizeBytes,
+          notes: '',
+          uploadedAt: new Date().toISOString().slice(0, 10),
+        });
+      }
+      updateSelfMemberProfile(
+        {
+          ...member,
+          documents: [...memberDocuments, ...added],
+          dataOrigin: 'real',
+          updatedAt: new Date().toISOString(),
+        },
+        isAdmin
+          ? `Đã tải lên ${added.length} tài liệu cá nhân cho ${member.fullName}.`
+          : `Đã tải lên ${added.length} tài liệu. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.`
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Lỗi tải tài liệu.', 'error');
+    } finally {
+      setUploadingDoc(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleAddDocLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = newDocTitle.trim();
+    const url = newDocUrl.trim();
+    if (!title) {
+      notify('Vui lòng nhập tên tài liệu.', 'error');
+      return;
+    }
+    if (!url) {
+      notify('Vui lòng nhập đường dẫn tài liệu (Google Drive, OneDrive, PDF...).', 'error');
+      return;
+    }
+    const item: MemberDocument = {
+      id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title,
+      fileName: title,
+      url,
+      mimeType: 'text/uri-list',
+      notes: newDocNotes.trim(),
+      uploadedAt: new Date().toISOString().slice(0, 10),
+    };
+    updateSelfMemberProfile(
+      {
+        ...member,
+        documents: [...memberDocuments, item],
+        dataOrigin: 'real',
+        updatedAt: new Date().toISOString(),
+      },
+      isAdmin
+        ? 'Đã lưu liên kết tài liệu cá nhân.'
+        : 'Đã lưu liên kết tài liệu. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+    );
+    setNewDocTitle('');
+    setNewDocUrl('');
+    setNewDocNotes('');
+    setShowDocLinkForm(false);
+  };
+
+  const resolveShareableDocUrl = (rawUrl: string): string => {
+    if (!rawUrl) return '';
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('data:')) {
+      return rawUrl;
+    }
+    return `${window.location.origin}${rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`}`;
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-sm"
@@ -162,7 +336,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                 className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#242428] px-3.5 py-2 text-xs font-medium text-white hover:bg-white/10 cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5 text-[#F02028]" />
-                <span>{isAdmin ? 'Chỉnh sửa hồ sơ' : 'Sửa thông tin của tôi'}</span>
+                <span>Chỉnh sửa hồ sơ</span>
               </button>
             )}
             <button
@@ -190,6 +364,21 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     <ResilientImage
                       src={member.youthPhoto}
                       alt={`${member.fullName} thời trẻ`}
+                      downloadFileName={`${member.fullName}-thoi-tre`}
+                      viewerSubtitle={`${member.fullName} · ${member.cohortLabel || 'Thời trẻ'}`}
+                      canEdit={editable}
+                      onChangeImage={(nextUrl) =>
+                        updateSelfMemberProfile(
+                          { ...member, youthPhoto: nextUrl },
+                          `Đã lưu ảnh thời trẻ của ${member.fullName}.`
+                        )
+                      }
+                      onDeleteImage={() =>
+                        updateSelfMemberProfile(
+                          { ...member, youthPhoto: '' },
+                          `Đã xóa ảnh thời trẻ của ${member.fullName}.`
+                        )
+                      }
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -207,6 +396,21 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     <ResilientImage
                       src={member.presentPhoto}
                       alt={`${member.fullName} hiện tại`}
+                      downloadFileName={`${member.fullName}-hien-tai`}
+                      viewerSubtitle={`${member.fullName} · ${member.presentLabel || 'Hiện tại'}`}
+                      canEdit={editable}
+                      onChangeImage={(nextUrl) =>
+                        updateSelfMemberProfile(
+                          { ...member, presentPhoto: nextUrl },
+                          `Đã lưu ảnh hiện tại của ${member.fullName}.`
+                        )
+                      }
+                      onDeleteImage={() =>
+                        updateSelfMemberProfile(
+                          { ...member, presentPhoto: '' },
+                          `Đã xóa ảnh hiện tại của ${member.fullName}.`
+                        )
+                      }
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -272,7 +476,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     )}
                     {!member.phone && !member.email && (
                       <div className="text-[11px] text-zinc-500">
-                        {editable
+                        {isAdmin || !firestoreSynced || (currentUser && member.ownerUid === currentUser.uid)
                           ? 'Chưa cập nhật số điện thoại / email.'
                           : 'Được bảo vệ riêng tư (chỉ chủ hồ sơ & Quản trị viên xem được).'}
                       </div>
@@ -456,7 +660,30 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     <div className="aspect-[4/3] overflow-hidden">
                       <ResilientImage
                         src={photo.url}
-                        alt={photo.caption}
+                        alt={photo.caption || `Ảnh hoạt động của ${member.fullName}`}
+                        downloadFileName={`${member.fullName}-${photo.caption || photo.id}`}
+                        viewerSubtitle={`${member.fullName}${photo.takenAt ? ` · ${photo.takenAt}` : ''}`}
+                        canEdit={editable}
+                        onChangeImage={(nextUrl) =>
+                          updateSelfMemberProfile(
+                            {
+                              ...member,
+                              activityPhotos: member.activityPhotos.map((p) =>
+                                p.id === photo.id ? { ...p, url: nextUrl } : p
+                              ),
+                            },
+                            'Đã lưu thay đổi ảnh hoạt động.'
+                          )
+                        }
+                        onDeleteImage={() =>
+                          updateSelfMemberProfile(
+                            {
+                              ...member,
+                              activityPhotos: member.activityPhotos.filter((p) => p.id !== photo.id),
+                            },
+                            'Đã xóa ảnh khỏi hồ sơ.'
+                          )
+                        }
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                     </div>
@@ -475,7 +702,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                             },
                             isAdmin
                               ? 'Đã xóa ảnh khỏi hồ sơ.'
-                              : 'Đã gỡ ảnh khỏi hồ sơ. Nhấn "Cập nhật" để lưu lên Cloud Firestore.'
+                              : 'Đã gỡ ảnh khỏi hồ sơ. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
                           )
                         }
                         aria-label="Xóa ảnh"
@@ -572,7 +799,7 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                               },
                               isAdmin
                                 ? 'Đã xóa bài viết chia sẻ.'
-                                : 'Đã gỡ bài viết. Nhấn "Cập nhật" để lưu lên Cloud Firestore.'
+                                : 'Đã gỡ bài viết. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
                             )
                           }
                           aria-label="Xóa bài viết"
@@ -590,6 +817,392 @@ export function MemberDetailModal({ member, onClose, onEdit }: MemberDetailModal
                     />
                   </article>
                 ))}
+              </div>
+            )}
+          </section>
+
+          {/* Personal YouTube Videos */}
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-base font-semibold text-white">
+                <Youtube className="w-4 h-4 text-[#F02028]" />
+                <span>Video YouTube cá nhân ({youtubeVideos.length})</span>
+              </div>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => setShowYoutubeForm((v) => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#242428] px-3.5 py-2 text-xs font-medium text-white hover:bg-white/10 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#F02028]" />
+                  <span>Thêm link YouTube</span>
+                </button>
+              )}
+            </div>
+
+            {showYoutubeForm && (
+              <form
+                onSubmit={handleAddYoutube}
+                className="rounded-2xl border border-[#F02028]/50 bg-[#242428] p-4 space-y-3"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="url"
+                    value={newYoutubeUrl}
+                    onChange={(e) => setNewYoutubeUrl(e.target.value)}
+                    required
+                    placeholder="Dán link YouTube (VD: https://youtu.be/...)"
+                    className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newYoutubeTitle}
+                    onChange={(e) => setNewYoutubeTitle(e.target.value)}
+                    placeholder="Tiêu đề video (tùy chọn)"
+                    className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={newYoutubeNotes}
+                  onChange={(e) => setNewYoutubeNotes(e.target.value)}
+                  placeholder="Ghi chú ngắn về video (tùy chọn)..."
+                  className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowYoutubeForm(false)}
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#F02028] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer"
+                  >
+                    Lưu link YouTube
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {youtubeVideos.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-[#242428]/50 p-6 text-center text-xs text-zinc-400">
+                Chưa có liên kết video YouTube nào được lưu.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {youtubeVideos.map((vid) => {
+                  const embedUrl = getYoutubeEmbedUrl(vid.youtubeUrl);
+                  const thumbUrl = getYoutubeThumbnailUrl(vid.youtubeUrl);
+                  const isPlaying = playingYoutubeId === vid.id && Boolean(embedUrl);
+                  return (
+                    <article
+                      key={vid.id}
+                      className="overflow-hidden rounded-2xl border border-white/10 bg-[#242428] flex flex-col"
+                    >
+                      {isPlaying && embedUrl ? (
+                        <div className="aspect-video w-full bg-black">
+                          <iframe
+                            src={`${embedUrl}?autoplay=1`}
+                            title={vid.title}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            className="h-full w-full border-0"
+                          />
+                        </div>
+                      ) : thumbUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setPlayingYoutubeId(vid.id)}
+                          aria-label={`Phát video ${vid.title}`}
+                          className="group relative aspect-video w-full overflow-hidden bg-black text-left cursor-pointer"
+                        >
+                          <img
+                            src={thumbUrl}
+                            alt={vid.title}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/15 transition-colors flex items-center justify-center">
+                            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F02028]/95 text-white shadow-lg transition-transform duration-200 group-hover:scale-110">
+                              <Play className="w-5 h-5 fill-current ml-0.5" />
+                            </span>
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="aspect-video w-full bg-[#171719] flex items-center justify-center text-xs text-zinc-400 px-3 text-center">
+                          Không có ảnh thu nhỏ. Mở trực tiếp trên YouTube.
+                        </div>
+                      )}
+                      <div className="p-3 flex-1 flex flex-col justify-between gap-2.5">
+                        <div className="space-y-1">
+                          <h4 className="font-semibold text-xs sm:text-sm text-white line-clamp-1" title={vid.title}>
+                            {vid.title}
+                          </h4>
+                          {vid.notes && (
+                            <p className="text-[11px] text-zinc-300 leading-relaxed line-clamp-2">{vid.notes}</p>
+                          )}
+                          <div className="font-mono-num text-[10px] text-zinc-500">{vid.addedAt}</div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-white/10">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyTextToClipboard(
+                                  vid.youtubeUrl,
+                                  `yt_${vid.id}`,
+                                  'Đã sao chép đường dẫn YouTube.'
+                                )
+                              }
+                              title="Sao chép link YouTube"
+                              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-[#171719] px-2 py-1 text-[11px] text-zinc-200 hover:border-[#F02028]/60 hover:text-white cursor-pointer"
+                            >
+                              {copiedId === `yt_${vid.id}` ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span>Đã chép</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                            <a
+                              href={vid.youtubeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Mở trên YouTube"
+                              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-[#171719] px-2 py-1 text-[11px] text-zinc-200 hover:border-[#F02028]/60 hover:text-white"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Mở</span>
+                            </a>
+                          </div>
+
+                          {editable && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (playingYoutubeId === vid.id) setPlayingYoutubeId(null);
+                                updateSelfMemberProfile(
+                                  {
+                                    ...member,
+                                    youtubeVideos: youtubeVideos.filter((v) => v.id !== vid.id),
+                                  },
+                                  isAdmin
+                                    ? 'Đã xóa video YouTube khỏi hồ sơ.'
+                                    : 'Đã gỡ video YouTube. Nhấn "Cập nhật lên App" để lưu vào ứng dụng.'
+                                );
+                              }}
+                              aria-label="Xóa video YouTube"
+                              title="Xóa video"
+                              className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-[#F02028] cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Personal Documents Archive */}
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-base font-semibold text-white">
+                <FileText className="w-4 h-4 text-[#F02028]" />
+                <span>Tài liệu cá nhân lưu trữ ({memberDocuments.length})</span>
+              </div>
+              {editable && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDocLinkForm((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#242428] px-3 py-2 text-xs font-medium text-white hover:bg-white/10 cursor-pointer"
+                  >
+                    <Link2 className="w-3.5 h-3.5 text-[#F02028]" />
+                    <span>Thêm link tài liệu</span>
+                  </button>
+                  <label className="inline-flex items-center gap-1.5 rounded-xl bg-[#F02028] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{uploadingDoc ? 'Đang tải...' : 'Tải lên tài liệu'}</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,image/*,audio/*"
+                      onChange={handleDocumentUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {showDocLinkForm && (
+              <form
+                onSubmit={handleAddDocLink}
+                className="rounded-2xl border border-[#F02028]/50 bg-[#242428] p-4 space-y-3"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={newDocTitle}
+                    onChange={(e) => setNewDocTitle(e.target.value)}
+                    required
+                    placeholder="Tên tài liệu *"
+                    className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
+                  />
+                  <input
+                    type="url"
+                    value={newDocUrl}
+                    onChange={(e) => setNewDocUrl(e.target.value)}
+                    required
+                    placeholder="Đường dẫn tài liệu (Google Drive, PDF, OneDrive...)"
+                    className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={newDocNotes}
+                  onChange={(e) => setNewDocNotes(e.target.value)}
+                  placeholder="Mô tả / ghi chú tài liệu (tùy chọn)..."
+                  className="w-full rounded-xl border border-white/10 bg-[#171719] px-3.5 py-2 text-sm text-white focus:border-[#F02028] focus:outline-none"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDocLinkForm(false)}
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-zinc-300 cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#F02028] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#d91b23] cursor-pointer"
+                  >
+                    Lưu tài liệu
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {memberDocuments.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-[#242428]/50 p-6 text-center text-xs text-zinc-400">
+                Chưa có tài liệu cá nhân nào. Thành viên có thể tải lên tệp (PDF, Word, Excel, PowerPoint, ảnh, ZIP...) hoặc lưu link tài liệu để lưu trữ tự do.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {memberDocuments.map((docItem) => {
+                  const shareUrl = resolveShareableDocUrl(docItem.url);
+                  const isExternalLink = docItem.mimeType === 'text/uri-list';
+                  const sizeLabel = formatFileSize(docItem.sizeBytes);
+                  return (
+                    <div
+                      key={docItem.id}
+                      className="rounded-2xl border border-white/10 bg-[#242428] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="rounded-xl border border-white/10 bg-[#171719] p-2.5 text-[#F02028] shrink-0">
+                          {isExternalLink ? <Link2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0 space-y-0.5">
+                          <h4 className="font-semibold text-sm text-white truncate">{docItem.title}</h4>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-zinc-400">
+                            {docItem.fileName && docItem.fileName !== docItem.title && (
+                              <span className="truncate max-w-[220px]">{docItem.fileName}</span>
+                            )}
+                            {sizeLabel && <span className="font-mono-num">{sizeLabel}</span>}
+                            {docItem.uploadedAt && <span className="font-mono-num">{docItem.uploadedAt}</span>}
+                          </div>
+                          {docItem.notes && (
+                            <p className="text-xs text-zinc-300 leading-relaxed pt-0.5">{docItem.notes}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                        {isExternalLink ? (
+                          <a
+                            href={docItem.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#171719] px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-[#F02028]/60 hover:text-white"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-[#F02028]" />
+                            <span>Mở tài liệu</span>
+                          </a>
+                        ) : (
+                          <a
+                            href={docItem.url}
+                            download={docItem.fileName || docItem.title}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#171719] px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-[#F02028]/60 hover:text-white"
+                          >
+                            <Download className="w-3.5 h-3.5 text-[#F02028]" />
+                            <span>Tải tài liệu</span>
+                          </a>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyTextToClipboard(
+                              docItem.notes ? `${docItem.title}\n${shareUrl}\n${docItem.notes}` : shareUrl,
+                              `doc_${docItem.id}`,
+                              'Đã sao chép tài liệu vào bộ nhớ tạm.'
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#171719] px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-[#F02028]/60 hover:text-white cursor-pointer"
+                        >
+                          {copiedId === `doc_${docItem.id}` ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Đã copy</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+
+                        {editable && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateSelfMemberProfile(
+                                {
+                                  ...member,
+                                  documents: memberDocuments.filter((d) => d.id !== docItem.id),
+                                },
+                                isAdmin
+                                  ? `Đã xóa tài liệu "${docItem.title}".`
+                                  : `Đã gỡ tài liệu "${docItem.title}". Nhấn "Cập nhật lên App" để lưu vào ứng dụng.`
+                              )
+                            }
+                            aria-label={`Xóa tài liệu ${docItem.title}`}
+                            className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-[#171719] px-2.5 py-1.5 text-xs text-zinc-400 hover:border-[#F02028]/60 hover:text-[#F02028] cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Xóa</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>

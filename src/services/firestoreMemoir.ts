@@ -328,6 +328,25 @@ async function buildMemberPublicFields(m: MemberProfile, index: number) {
     publishedAt: clampStr(a.publishedAt, 40),
   }));
 
+  const youtubeVideos = (Array.isArray(m.youtubeVideos) ? m.youtubeVideos : []).slice(0, 30).map((v, vIdx) => ({
+    id: sanitizeId(v.id, `ytm_${vIdx}`),
+    title: clampStr(v.title, 240, 'Video YouTube'),
+    youtubeUrl: clampStr(v.youtubeUrl, 2048),
+    notes: clampStr(v.notes, 1000),
+    addedAt: clampStr(v.addedAt, 40),
+  }));
+
+  const documents = (Array.isArray(m.documents) ? m.documents : []).slice(0, 50).map((d, dIdx) => ({
+    id: sanitizeId(d.id, `doc_${dIdx}`),
+    title: clampStr(d.title, 240, 'Tài liệu cá nhân'),
+    fileName: clampStr(d.fileName, 200),
+    url: clampStr(d.url && !d.url.startsWith('data:') ? d.url : d.url?.slice(0, 2048), 2048),
+    mimeType: clampStr(d.mimeType, 160),
+    sizeBytes: typeof d.sizeBytes === 'number' && Number.isFinite(d.sizeBytes) ? Math.max(0, Math.floor(d.sizeBytes)) : 0,
+    notes: clampStr(d.notes, 1000),
+    uploadedAt: clampStr(d.uploadedAt, 40),
+  }));
+
   const publicSocials: Record<string, string> = {};
   if (m.socials?.facebook) publicSocials.facebook = clampStr(m.socials.facebook, 2048);
   if (m.socials?.website) publicSocials.website = clampStr(m.socials.website, 2048);
@@ -352,6 +371,8 @@ async function buildMemberPublicFields(m: MemberProfile, index: number) {
       .slice(0, 50),
     activityPhotos,
     articles,
+    youtubeVideos,
+    documents,
     socials: publicSocials,
     favoriteQuote: clampStr(m.favoriteQuote, 600),
     orderIndex: clampOrder(m.orderIndex, index),
@@ -619,13 +640,20 @@ export function subscribeMemoirFirestore(
     callbacks.onSnapshotData(combined, configLoaded);
   };
 
-  const refreshAllowedContacts = async (membersList: MemberProfile[]) => {
-    const eligible = membersList.filter((m) => isAdminUser || (m.ownerUid && m.ownerUid === user.uid));
+  const refreshAllowedContacts = async (membersList: MemberProfile[], committedMemberIds: Set<string>) => {
+    const eligible = membersList.filter(
+      (m) => committedMemberIds.has(m.id) && (isAdminUser || (m.ownerUid && m.ownerUid === user.uid))
+    );
+    if (eligible.length === 0) {
+      return;
+    }
     await Promise.all(
       eligible.map(async (m) => {
+        if (cancelled || !tracker.memberIds.has(m.id)) return;
         const contactPath = `members/${m.id}/private/contact`;
         try {
           const snap = await getDoc(doc(db, 'members', m.id, 'private', 'contact'));
+          if (cancelled || !tracker.memberIds.has(m.id)) return;
           if (snap.exists()) {
             tracker.memberContactIds.add(m.id);
             const c = snap.data();
@@ -639,7 +667,8 @@ export function subscribeMemoirFirestore(
             tracker.memberContactIds.delete(m.id);
           }
         } catch (error) {
-          // Only rethrow unexpected permission issues on eligible docs
+          if (cancelled || !tracker.memberIds.has(m.id)) return;
+          // Only rethrow unexpected permission issues on eligible committed docs
           try {
             handleFirestoreError(error, OperationType.GET, contactPath);
           } catch (wrapped) {
@@ -785,9 +814,13 @@ export function subscribeMemoirFirestore(
   unsubs.push(
     onSnapshot(
       query(collection(db, 'members'), where('visibility', '==', 'public')),
+      { includeMetadataChanges: true },
       (snap) => {
         loadedFlags.members = true;
         tracker.memberIds = new Set(snap.docs.map((d) => d.id));
+        const committedMemberIds = new Set(
+          snap.docs.filter((d) => !d.metadata.hasPendingWrites).map((d) => d.id)
+        );
         publicMembers = snap.docs.map((d) => {
           const data = d.data();
           const socialsMap = (data.socials || {}) as { facebook?: string; website?: string };
@@ -811,6 +844,8 @@ export function subscribeMemoirFirestore(
             achievements: Array.isArray(data.achievements) ? data.achievements : [],
             activityPhotos: Array.isArray(data.activityPhotos) ? data.activityPhotos : [],
             articles: Array.isArray(data.articles) ? data.articles : [],
+            youtubeVideos: Array.isArray(data.youtubeVideos) ? data.youtubeVideos : [],
+            documents: Array.isArray(data.documents) ? data.documents : [],
             socials: {
               ...(socialsMap.facebook ? { facebook: socialsMap.facebook } : {}),
               ...(socialsMap.website ? { website: socialsMap.website } : {}),
@@ -823,7 +858,7 @@ export function subscribeMemoirFirestore(
           };
         });
         emitCombined();
-        void refreshAllowedContacts(publicMembers);
+        void refreshAllowedContacts(publicMembers, committedMemberIds);
       },
       (error) => {
         try {

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Clock, Edit3, Film, MapPin, Sparkles, Users, X } from 'lucide-react';
+import { Calendar, Clock, Edit3, Film, MapPin, RefreshCw, Save, Sparkles, Users, X } from 'lucide-react';
 import { useMemoir } from '../../context/MemoirContext';
 import type { SchoolEvent } from '../../types/memoir';
 import { ResilientImage } from '../common/ResilientMedia';
@@ -13,7 +13,7 @@ interface EventDetailModalProps {
 }
 
 export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalProps) {
-  const { data, isAdmin, aiConfigured, updateData, notify } = useMemoir();
+  const { data, isAdmin, isSaving, aiConfigured, updateData, updateSelfMemberProfile, saveAndPublishEvent, notify } = useMemoir();
   const [selectedAlbum, setSelectedAlbum] = useState<string>('Tất cả');
   const [summarizing, setSummarizing] = useState(false);
 
@@ -90,7 +90,16 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
             </h2>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => saveAndPublishEvent(event, { syncToApp: true })}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#F02028] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#d91b23] disabled:opacity-50 cursor-pointer"
+            >
+              {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{isSaving ? 'Đang cập nhật...' : 'Lưu & Cập nhật'}</span>
+            </button>
             {isAdmin && (
               <button
                 type="button"
@@ -116,7 +125,40 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
           {/* Cover + Metadata */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             <div className="lg:col-span-6 overflow-hidden rounded-2xl border border-white/10 bg-[#242428] aspect-[4/3]">
-              <ResilientImage src={event.coverImage} alt={event.title} className="h-full w-full object-cover" />
+              <ResilientImage
+                src={event.coverImage}
+                alt={event.title}
+                downloadFileName={`su-kien-${event.title}`}
+                viewerSubtitle={`${event.category} · ${event.date}`}
+                canEdit
+                onChangeImage={(nextUrl) =>
+                  updateData(
+                    (prev) => ({
+                      ...prev,
+                      events: prev.events.map((e) =>
+                        e.id === event.id
+                          ? { ...e, coverImage: nextUrl, dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                          : e
+                      ),
+                    }),
+                    `Đã lưu ảnh bìa sự kiện "${event.title}".`
+                  )
+                }
+                onDeleteImage={() =>
+                  updateData(
+                    (prev) => ({
+                      ...prev,
+                      events: prev.events.map((e) =>
+                        e.id === event.id
+                          ? { ...e, coverImage: '', dataOrigin: 'real', updatedAt: new Date().toISOString() }
+                          : e
+                      ),
+                    }),
+                    `Đã xóa ảnh bìa sự kiện "${event.title}".`
+                  )
+                }
+                className="h-full w-full object-cover"
+              />
             </div>
 
             <div className="lg:col-span-6 flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-[#242428] p-5">
@@ -221,6 +263,22 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                       <ResilientImage
                         src={p.presentPhoto || p.youthPhoto}
                         alt={p.fullName}
+                        downloadFileName={`${p.fullName}-chan-dung`}
+                        viewerSubtitle={`${p.fullName} · ${p.role || 'Thành viên tham gia'}`}
+                        hideCornerButton
+                        canEdit
+                        onChangeImage={(nextUrl) =>
+                          updateSelfMemberProfile(
+                            p.presentPhoto ? { ...p, presentPhoto: nextUrl } : { ...p, presentPhoto: nextUrl },
+                            `Đã lưu ảnh chân dung của ${p.fullName}.`
+                          )
+                        }
+                        onDeleteImage={() =>
+                          updateSelfMemberProfile(
+                            p.presentPhoto ? { ...p, presentPhoto: '' } : { ...p, youthPhoto: '' },
+                            `Đã xóa ảnh chân dung của ${p.fullName}.`
+                          )
+                        }
                         className="h-full w-full object-cover"
                       />
                     </div>
@@ -269,7 +327,52 @@ export function EventDetailModal({ event, onClose, onEdit }: EventDetailModalPro
                 {visiblePhotos.map((photo) => (
                   <figure key={photo.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#242428]">
                     <div className="aspect-[4/3]">
-                      <ResilientImage src={photo.url} alt={photo.caption} className="h-full w-full object-cover" />
+                      <ResilientImage
+                        src={photo.url}
+                        alt={photo.caption || 'Ảnh tư liệu'}
+                        downloadFileName={`${event.title}-${photo.caption || photo.id}`}
+                        viewerSubtitle={`${event.title} · Album: ${photo.albumName || 'Chung'}`}
+                        canEdit
+                        onChangeImage={(nextUrl) =>
+                          updateData(
+                            (prev) => ({
+                              ...prev,
+                              events: prev.events.map((e) =>
+                                e.id === event.id
+                                  ? {
+                                      ...e,
+                                      photos: e.photos.map((item) =>
+                                        item.id === photo.id ? { ...item, url: nextUrl } : item
+                                      ),
+                                      dataOrigin: 'real',
+                                      updatedAt: new Date().toISOString(),
+                                    }
+                                  : e
+                              ),
+                            }),
+                            'Đã lưu thay đổi ảnh trong album sự kiện.'
+                          )
+                        }
+                        onDeleteImage={() =>
+                          updateData(
+                            (prev) => ({
+                              ...prev,
+                              events: prev.events.map((e) =>
+                                e.id === event.id
+                                  ? {
+                                      ...e,
+                                      photos: e.photos.filter((item) => item.id !== photo.id),
+                                      dataOrigin: 'real',
+                                      updatedAt: new Date().toISOString(),
+                                    }
+                                  : e
+                              ),
+                            }),
+                            'Đã xóa ảnh khỏi album sự kiện.'
+                          )
+                        }
+                        className="h-full w-full object-cover"
+                      />
                     </div>
                     <figcaption className="p-3 text-xs text-zinc-300">
                       <div className="font-medium text-white truncate">{photo.caption || 'Ảnh tư liệu'}</div>
